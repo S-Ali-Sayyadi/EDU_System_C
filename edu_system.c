@@ -98,14 +98,180 @@ typedef struct
     int course_survey;
 } CalendarState;
 
+static Student students[MAX_STUDENTS];
+static Faculty faculty_members[MAX_FACULTY];
+static Course courses[MAX_COURSES];
+
+static int student_count=0;
+static int faculty_count=0;
+static int course_count=0;
+
+static void copy_str(char *destination, const char *source, size_t size);
+
+static int find_student_index(const char *student_id);
+static int find_faculty_index(const char *faculty_id);
+static int find_course_index(const char *course_id);
+
+static void initialize_sample_data(void);
+static void show_data_summary(void);
+
 static void trim(char *text);
 static void read_line(const char *prompt, char *output, size_t size);
 static int read_int(const char *prompt);
 static void show_main_menu(void);
 
+static void copy_str(char *destination,const char *source,size_t size)
+{
+    size_t index=0;
+
+    if (size==0)
+    {
+        return;
+    }
+
+    if (source==NULL)
+    {
+        source="";
+    }
+
+    while (index+1<size && source[index]!='\0')
+    {
+        destination[index]=source[index];
+        index++;
+    }
+    destination[index]='\0';
+}
+
+static int find_student_index(const char *student_id)
+{
+    int index;
+
+    for (index=0; index<student_count; index++)
+    {
+        if (strcmp(students[index].student_id, student_id)==0)
+        {
+            return index;
+        }
+    }
+    return -1;
+}
+
+static int find_faculty_index(const char *faculty_id)
+{
+    int index;
+
+    for (index=0; index<faculty_count; index++)
+    {
+        if (strcmp(faculty_members[index].faculty_id,faculty_id)==0)
+        {
+            return index;
+        }
+    }
+    return -1;
+}
+
+static int find_course_index(const char *course_id)
+{
+    int index;
+
+    for (index=0; index<course_count; index++)
+    {
+        if (strcmp(courses[index].course_id, course_id)==0)
+        {
+            return index;
+        }
+    }
+    return -1;
+}
+
+static void initialize_sample_data(void)
+{
+    Student *student;
+    Faculty *faculty;
+    Course *course;
+
+    if (student_count < MAX_STUDENTS && find_student_index("404123456")==-1)
+    {
+        student = &students[student_count];
+
+        memset(student, 0, sizeof(*student));
+
+        copy_str(student->first_name,"Ali",sizeof(student->first_name));
+
+        copy_str(student->last_name,"Ahmadi",sizeof(student->last_name));
+
+        copy_str(student->student_id,"404123456",sizeof(student->student_id));
+
+        copy_str(student->field,"Computer Engineering",sizeof(student->field));
+
+        copy_str(student->section,"BSc",sizeof(student->section));
+
+        copy_str(student->password,"123456",sizeof(student->password));
+
+        student->entrance_year=1404;
+        student_count++;
+    }
+
+    if (faculty_count < MAX_FACULTY && find_faculty_index("FCS105")==-1)
+    {
+        faculty=&faculty_members[faculty_count];
+
+        memset(faculty, 0, sizeof(*faculty));
+
+        copy_str(faculty->first_name,"Hossein",sizeof(faculty->first_name));
+
+        copy_str(faculty->last_name,"Asadi",sizeof(faculty->last_name));
+
+        copy_str(faculty->faculty_id,"FCS105",sizeof(faculty->faculty_id));
+
+        copy_str(faculty->field,"Computer Engineering",sizeof(faculty->field));
+
+        copy_str(faculty->degree,"PhD",sizeof(faculty->degree));
+
+        copy_str(faculty->password,"123456",sizeof(faculty->password));
+
+        faculty_count++;
+    }
+
+    if (course_count < MAX_COURSES && find_course_index("CS101")==-1)
+    {
+        course=&courses[course_count];
+
+        memset(course, 0, sizeof(*course));
+
+        copy_str(course->name,"Fundamentals of Programming",sizeof(course->name));
+
+        copy_str(course->course_id,"CS101",sizeof(course->course_id));
+
+        copy_str(course->prerequisites,"-",sizeof(course->prerequisites));
+
+        copy_str(course->section,"BSc",sizeof(course->section));
+
+        copy_str(course->field,"Computer Engineering",sizeof(course->field));
+
+        course->units=3;
+        course_count++;
+    }
+}
+
+static void show_data_summary(void)
+{
+    printf("\nSample data loaded successfully.\n");
+
+    printf(
+        "Students: %d | Faculty: %d | Courses: %d\n",
+        student_count,
+        faculty_count,
+        course_count
+    );
+}
+
 int main(void)
 {
     int option;
+
+        initialize_sample_data();
+    show_data_summary();
 
     while (1)
     {
