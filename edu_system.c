@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <string.h>
+#include <ctype.h>
 
 #define MAX_STUDENTS 1000
 #define MAX_FACULTY 500
@@ -96,6 +98,8 @@ typedef struct
     int course_survey;
 } CalendarState;
 
+static void trim(char *text);
+static void read_line(const char *prompt, char *output, size_t size);
 static int read_int(const char *prompt);
 static void show_main_menu(void);
 
@@ -150,25 +154,64 @@ static void show_main_menu(void)
     printf("5. Exit\n");
 }
 
+static void trim(char *text)
+{
+    size_t start=0;
+    size_t length;
+
+    if (text==NULL)
+    {
+        return;
+    }
+
+    while (text[start]!='\0' && isspace((unsigned char)text[start]))
+    {
+        start++;
+    }
+
+       if (start>0)
+    {
+        memmove(text, text+start, strlen(text+start)+1);
+    }
+
+    length=strlen(text);
+
+    while (length>0 && isspace((unsigned char)text[length-1]))
+    {
+        text[length-1]='\0';
+        length--;
+    }
+}
+
+static void read_line(const char *prompt,char *output,size_t size)
+{
+    printf("%s", prompt);
+
+    if (fgets(output, (int)size, stdin)==NULL)
+    {
+        output[0]='\0';
+        clearerr(stdin);
+        return;
+}
+    output[strcspn(output, "\n")]='\0';
+    trim(output);
+}
+
 static int read_int(const char *prompt)
 {
     char input[100];
+    char extra_character;
     int value;
 
     while (1)
     {
-        printf("%s", prompt);
+        read_line(prompt, input, sizeof(input));
 
-        if (fgets(input, sizeof(input), stdin)==NULL)
-        {
-            return 5;
-        }
-
-        if (sscanf(input, "%d", &value)==1)
+               if (sscanf(input, "%d %c", &value, &extra_character)==1)
         {
             return value;
         }
 
-        printf("Please enter a valid number.\n");
+        printf("Please enter a valid integer.\n");
     }
 }
