@@ -121,6 +121,10 @@ static void login_student(void);
 static void login_faculty(void);
 static void login_admin(void);
 
+static void student_dashboard(int student_index);
+static void faculty_dashboard(int faculty_index);
+static void admin_dashboard(void);
+
 static void trim(char *text);
 static void read_line(const char *prompt, char *output, size_t size);
 static int read_int(const char *prompt);
@@ -272,6 +276,172 @@ static void show_data_summary(void)
     );
 }
 
+static void student_dashboard(int student_index)
+{
+    int option;
+    Student *student=&students[student_index];
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Student Dashboard\n");
+        printf("----------------------------------------\n");
+        printf(
+            "Welcome %s %s\n",
+            student->first_name,
+            student->last_name
+        );
+        printf("Student ID: %s\n", student->student_id);
+        printf("\n");
+        printf("1. Offerings\n");
+        printf("2. Courses\n");
+        printf("3. Report card\n");
+        printf("4. Course survey\n");
+        printf("5. Log out\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            printf("Student offerings will be added later.\n");
+        }
+        else if (option==2)
+        {
+            printf("Course list will be added later.\n");
+        }
+        else if (option==3)
+        {
+            printf("Report card will be added later.\n");
+        }
+        else if (option==4)
+        {
+            printf("Course survey will be added later.\n");
+        }
+        else if (option==5)
+        {
+            printf("Student logged out successfully.\n");
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
+}
+
+static void faculty_dashboard(int faculty_index)
+{
+    int option;
+    Faculty *faculty=&faculty_members[faculty_index];
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Faculty Dashboard\n");
+        printf("----------------------------------------\n");
+        printf(
+            "Welcome Professor %s %s\n",
+            faculty->first_name,
+            faculty->last_name
+        );
+        printf("Faculty ID: %s\n", faculty->faculty_id);
+        printf("\n");
+        printf("1. My offerings\n");
+        printf("2. Offerings in a semester\n");
+        printf("3. Courses\n");
+        printf("4. Offer a course\n");
+        printf("5. Log out\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            printf("Faculty offerings will be added later.\n");
+        }
+        else if (option==2)
+        {
+            printf("Semester offerings will be added later.\n");
+        }
+        else if (option==3)
+        {
+            printf("Course list will be added later.\n");
+        }
+        else if (option==4)
+        {
+            printf("Course offering request will be added later.\n");
+        }
+        else if (option==5)
+        {
+            printf("Faculty member logged out successfully.\n");
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
+}
+
+static void admin_dashboard(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Admin Dashboard\n");
+        printf("----------------------------------------\n");
+        printf("Welcome %s\n", ADMIN_USERNAME);
+        printf("\n");
+        printf("1. Academic calendar\n");
+        printf("2. Students\n");
+        printf("3. Faculty members\n");
+        printf("4. Requests\n");
+        printf("5. Offerings\n");
+        printf("6. Courses\n");
+        printf("7. Log out\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            printf("Academic calendar will be added later.\n");
+        }
+        else if (option==2)
+        {
+            printf("Student management will be added later.\n");
+        }
+        else if (option==3)
+        {
+            printf("Faculty management will be added later.\n");
+        }
+        else if (option==4)
+        {
+            printf("Request management will be added later.\n");
+        }
+        else if (option==5)
+        {
+            printf("Offering management will be added later.\n");
+        }
+        else if (option==6)
+        {
+            printf("Course management will be added later.\n");
+        }
+        else if (option==7)
+        {
+            printf("Admin logged out successfully.\n");
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
+}
+
 static void login_student(void)
 {
     char username[SMALL_SIZE];
@@ -305,11 +475,7 @@ static void login_student(void)
     }
 
     printf("\nLogin successful.\n");
-    printf(
-        "Welcome %s %s.\n",
-        students[index].first_name,
-        students[index].last_name
-    );
+    student_dashboard(index);
 }
 
 static void login_faculty(void)
@@ -345,11 +511,7 @@ static void login_faculty(void)
     }
 
     printf("\nLogin successful.\n");
-    printf(
-        "Welcome Professor %s %s.\n",
-        faculty_members[index].first_name,
-        faculty_members[index].last_name
-    );
+    faculty_dashboard(index);
 }
 
 static void login_admin(void)
@@ -382,7 +544,7 @@ static void login_admin(void)
     }
 
     printf("\nLogin successful.\n");
-    printf("Welcome admin.\n");
+    admin_dashboard();
 }
 
 int main(void)
