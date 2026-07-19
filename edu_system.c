@@ -122,6 +122,10 @@ static void register_student(void);
 static void delete_student(void);
 static void admin_students_menu(void);
 
+static void list_faculty(void);
+static void register_faculty(void);
+static void admin_faculty_menu(void);
+
 static void login_student(void);
 static void login_faculty(void);
 static void login_admin(void);
@@ -686,6 +690,222 @@ static void admin_students_menu(void)
     }
 }
 
+static void list_faculty(void)
+{
+    int index;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Faculty Members List\n");
+    printf("----------------------------------------\n");
+
+    if (faculty_count==0)
+    {
+        printf("No faculty members have been registered.\n");
+        return;
+    }
+
+    for (index=0; index<faculty_count; index++)
+    {
+        printf("\nFaculty member number %d\n", index+1);
+
+        printf(
+            "Name: %s %s\n",
+            faculty_members[index].first_name,
+            faculty_members[index].last_name
+        );
+
+        printf(
+            "Faculty ID: %s\n",
+            faculty_members[index].faculty_id
+        );
+
+        printf(
+            "National code: %s\n",
+            faculty_members[index].national_code
+        );
+
+        printf(
+            "Field: %s\n",
+            faculty_members[index].field
+        );
+
+        printf(
+            "Entrance year: %d\n",
+            faculty_members[index].entrance_year
+        );
+
+        printf(
+            "Degree: %s\n",
+            faculty_members[index].degree
+        );
+
+        printf(
+            "Department: %s\n",
+            faculty_members[index].department
+        );
+    }
+
+    printf("\nTotal faculty members: %d\n", faculty_count);
+}
+
+static void register_faculty(void)
+{
+    Faculty *faculty;
+    char faculty_id[SMALL_SIZE];
+
+    if (faculty_count>=MAX_FACULTY)
+    {
+        printf("Faculty storage is full.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Register New Faculty Member\n");
+    printf("----------------------------------------\n");
+
+    read_line(
+        "Faculty ID: ",
+        faculty_id,
+        sizeof(faculty_id)
+    );
+
+    if (faculty_id[0]=='\0')
+    {
+        printf("Faculty ID cannot be empty.\n");
+        return;
+    }
+
+    if (find_faculty_index(faculty_id)!=-1)
+    {
+        printf("This faculty ID already exists.\n");
+        return;
+    }
+
+    faculty=&faculty_members[faculty_count];
+
+    memset(faculty, 0, sizeof(*faculty));
+
+    copy_str(
+        faculty->faculty_id,
+        faculty_id,
+        sizeof(faculty->faculty_id)
+    );
+
+    read_line(
+        "First name: ",
+        faculty->first_name,
+        sizeof(faculty->first_name)
+    );
+
+    read_line(
+        "Last name: ",
+        faculty->last_name,
+        sizeof(faculty->last_name)
+    );
+
+    read_line(
+        "National code: ",
+        faculty->national_code,
+        sizeof(faculty->national_code)
+    );
+
+    read_line(
+        "Field: ",
+        faculty->field,
+        sizeof(faculty->field)
+    );
+
+    faculty->entrance_year=
+        read_int("Entrance year: ");
+
+    read_line(
+        "Degree: ",
+        faculty->degree,
+        sizeof(faculty->degree)
+    );
+
+    read_line(
+        "Department: ",
+        faculty->department,
+        sizeof(faculty->department)
+    );
+
+    read_line(
+        "Password: ",
+        faculty->password,
+        sizeof(faculty->password)
+    );
+
+    if (faculty->password[0]=='\0')
+    {
+        copy_str(
+            faculty->password,
+            "123456",
+            sizeof(faculty->password)
+        );
+    }
+
+    read_line(
+        "Where were you born? ",
+        faculty->answer_birth,
+        sizeof(faculty->answer_birth)
+    );
+
+    read_line(
+        "What was the first book you read? ",
+        faculty->answer_book,
+        sizeof(faculty->answer_book)
+    );
+
+    read_line(
+        "What was the color of your first bicycle? ",
+        faculty->answer_bike,
+        sizeof(faculty->answer_bike)
+    );
+
+    faculty_count++;
+
+    printf("\nFaculty member registered successfully.\n");
+    printf("Faculty ID: %s\n", faculty->faculty_id);
+}
+
+static void admin_faculty_menu(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Admin: Faculty Management\n");
+        printf("----------------------------------------\n");
+        printf("1. List faculty members\n");
+        printf("2. Register a faculty member\n");
+        printf("3. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            list_faculty();
+        }
+        else if (option==2)
+        {
+            register_faculty();
+        }
+        else if (option==3)
+        {
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
+}
+
 static void admin_dashboard(void)
 {
     int option;
@@ -718,7 +938,7 @@ static void admin_dashboard(void)
         }
         else if (option==3)
         {
-            printf("Faculty management will be added later.\n");
+            admin_faculty_menu();
         }
         else if (option==4)
         {
