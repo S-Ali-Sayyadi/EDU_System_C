@@ -124,6 +124,7 @@ static void admin_students_menu(void);
 
 static void list_faculty(void);
 static void register_faculty(void);
+static void delete_faculty(void);
 static void admin_faculty_menu(void);
 
 static void login_student(void);
@@ -871,6 +872,92 @@ static void register_faculty(void)
     printf("Faculty ID: %s\n", faculty->faculty_id);
 }
 
+static void delete_faculty(void)
+{
+    char faculty_id[SMALL_SIZE];
+    char confirmation[SMALL_SIZE];
+    int faculty_index;
+    int index;
+
+    if (faculty_count==0)
+    {
+        printf("No faculty members have been registered.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Delete Faculty Member\n");
+    printf("----------------------------------------\n");
+
+    read_line(
+        "Enter faculty ID: ",
+        faculty_id,
+        sizeof(faculty_id)
+    );
+
+    faculty_index=find_faculty_index(faculty_id);
+
+    if (faculty_index==-1)
+    {
+        printf("Faculty ID not found.\n");
+        return;
+    }
+
+    printf("\nFaculty member information:\n");
+
+    printf(
+        "Name: %s %s\n",
+        faculty_members[faculty_index].first_name,
+        faculty_members[faculty_index].last_name
+    );
+
+    printf(
+        "Faculty ID: %s\n",
+        faculty_members[faculty_index].faculty_id
+    );
+
+    printf(
+        "Department: %s\n",
+        faculty_members[faculty_index].department
+    );
+
+    read_line(
+        "Are you sure you want to delete this faculty member? "
+        "(yes/no): ",
+        confirmation,
+        sizeof(confirmation)
+    );
+
+    if (strcmp(confirmation, "yes")!=0 &&
+        strcmp(confirmation, "Yes")!=0 &&
+        strcmp(confirmation, "YES")!=0)
+    {
+        printf("Faculty deletion was cancelled.\n");
+        return;
+    }
+
+    for (
+        index=faculty_index;
+        index<faculty_count-1;
+        index++
+    )
+    {
+        faculty_members[index]=
+            faculty_members[index+1];
+    }
+
+    faculty_count--;
+
+    memset(
+        &faculty_members[faculty_count],
+        0,
+        sizeof(faculty_members[faculty_count])
+    );
+
+    printf("Faculty member deleted successfully.\n");
+}
+
 static void admin_faculty_menu(void)
 {
     int option;
@@ -881,10 +968,10 @@ static void admin_faculty_menu(void)
         printf("----------------------------------------\n");
         printf("Admin: Faculty Management\n");
         printf("----------------------------------------\n");
-        printf("1. List faculty members\n");
-        printf("2. Register a faculty member\n");
-        printf("3. Go back\n");
-
+	printf("1. List faculty members\n");
+	printf("2. Register a faculty member\n");
+	printf("3. Delete a faculty member\n");
+	printf("4. Go back\n");
         option=read_int("Enter an option: ");
 
         if (option==1)
@@ -897,8 +984,12 @@ static void admin_faculty_menu(void)
         }
         else if (option==3)
         {
-            return;
+            delete_faculty(); 
         }
+	else if (option==4)
+	{
+  	    return;
+	}
         else
         {
             printf("Invalid option. Please try again.\n");
