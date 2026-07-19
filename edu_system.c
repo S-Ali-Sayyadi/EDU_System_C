@@ -117,6 +117,10 @@ static int find_course_index(const char *course_id);
 static void initialize_sample_data(void);
 static void show_data_summary(void);
 
+static void list_students(void);
+static void register_student(void);
+static void admin_students_menu(void);
+
 static void login_student(void);
 static void login_faculty(void);
 static void login_admin(void);
@@ -384,6 +388,225 @@ static void faculty_dashboard(int faculty_index)
     }
 }
 
+static void list_students(void)
+{
+    int index;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Students List\n");
+    printf("----------------------------------------\n");
+
+    if (student_count==0)
+    {
+        printf("No students have been registered.\n");
+        return;
+    }
+
+    for (index=0; index<student_count; index++)
+    {
+        printf("\nStudent number %d\n", index+1);
+        printf(
+            "Name: %s %s\n",
+            students[index].first_name,
+            students[index].last_name
+        );
+        printf(
+            "Student ID: %s\n",
+            students[index].student_id
+        );
+        printf(
+            "National code: %s\n",
+            students[index].national_code
+        );
+        printf(
+            "Field: %s\n",
+            students[index].field
+        );
+        printf(
+            "Entrance year: %d\n",
+            students[index].entrance_year
+        );
+        printf(
+            "Section: %s\n",
+            students[index].section
+        );
+        printf(
+            "Mentor: %s\n",
+            students[index].mentor
+        );
+        printf(
+            "Department: %s\n",
+            students[index].department
+        );
+    }
+
+    printf("\nTotal students: %d\n", student_count);
+}
+
+static void register_student(void)
+{
+    Student *student;
+    char student_id[SMALL_SIZE];
+
+    if (student_count>=MAX_STUDENTS)
+    {
+        printf("Student storage is full.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Register New Student\n");
+    printf("----------------------------------------\n");
+
+    read_line(
+        "Student ID: ",
+        student_id,
+        sizeof(student_id)
+    );
+
+    if (student_id[0]=='\0')
+    {
+        printf("Student ID cannot be empty.\n");
+        return;
+    }
+
+    if (find_student_index(student_id)!=-1)
+    {
+        printf("This student ID already exists.\n");
+        return;
+    }
+
+    student=&students[student_count];
+
+    memset(student, 0, sizeof(*student));
+
+    copy_str(
+        student->student_id,
+        student_id,
+        sizeof(student->student_id)
+    );
+
+    read_line(
+        "First name: ",
+        student->first_name,
+        sizeof(student->first_name)
+    );
+
+    read_line(
+        "Last name: ",
+        student->last_name,
+        sizeof(student->last_name)
+    );
+
+    read_line(
+        "National code: ",
+        student->national_code,
+        sizeof(student->national_code)
+    );
+
+    read_line(
+        "Field: ",
+        student->field,
+        sizeof(student->field)
+    );
+
+    student->entrance_year=
+        read_int("Entrance year: ");
+
+    read_line(
+        "Section: ",
+        student->section,
+        sizeof(student->section)
+    );
+
+    read_line(
+        "Mentor: ",
+        student->mentor,
+        sizeof(student->mentor)
+    );
+
+    read_line(
+        "Department: ",
+        student->department,
+        sizeof(student->department)
+    );
+
+    read_line(
+        "Password: ",
+        student->password,
+        sizeof(student->password)
+    );
+
+    if (student->password[0]=='\0')
+    {
+        copy_str(
+            student->password,
+            "123456",
+            sizeof(student->password)
+        );
+    }
+
+    read_line(
+        "Where were you born? ",
+        student->answer_birth,
+        sizeof(student->answer_birth)
+    );
+
+    read_line(
+        "What was the first book you read? ",
+        student->answer_book,
+        sizeof(student->answer_book)
+    );
+
+    read_line(
+        "What was the color of your first bicycle? ",
+        student->answer_bike,
+        sizeof(student->answer_bike)
+    );
+
+    student_count++;
+
+    printf("\nStudent registered successfully.\n");
+    printf("Student ID: %s\n", student->student_id);
+}
+
+static void admin_students_menu(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Admin: Student Management\n");
+        printf("----------------------------------------\n");
+        printf("1. List students\n");
+        printf("2. Register a student\n");
+        printf("3. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            list_students();
+        }
+        else if (option==2)
+        {
+            register_student();
+        }
+        else if (option==3)
+        {
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
+}
+
 static void admin_dashboard(void)
 {
     int option;
@@ -412,7 +635,7 @@ static void admin_dashboard(void)
         }
         else if (option==2)
         {
-            printf("Student management will be added later.\n");
+            admin_students_menu();
         }
         else if (option==3)
         {
