@@ -119,6 +119,7 @@ static void show_data_summary(void);
 
 static void list_students(void);
 static void register_student(void);
+static void delete_student(void);
 static void admin_students_menu(void);
 
 static void login_student(void);
@@ -572,6 +573,79 @@ static void register_student(void)
     printf("Student ID: %s\n", student->student_id);
 }
 
+static void delete_student(void)
+{
+    char student_id[SMALL_SIZE];
+    char confirmation[SMALL_SIZE];
+    int student_index;
+    int index;
+
+    if (student_count==0)
+    {
+        printf("No students have been registered.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Delete Student\n");
+    printf("----------------------------------------\n");
+
+    read_line(
+        "Enter student ID: ",
+        student_id,
+        sizeof(student_id)
+    );
+
+    student_index=find_student_index(student_id);
+
+    if (student_index==-1)
+    {
+        printf("Student ID not found.\n");
+        return;
+    }
+
+    printf("\nStudent information:\n");
+    printf(
+        "Name: %s %s\n",
+        students[student_index].first_name,
+        students[student_index].last_name
+    );
+    printf(
+        "Student ID: %s\n",
+        students[student_index].student_id
+    );
+
+    read_line(
+        "Are you sure you want to delete this student? (yes/no): ",
+        confirmation,
+        sizeof(confirmation)
+    );
+
+    if (strcmp(confirmation, "yes")!=0 &&
+        strcmp(confirmation, "YES")!=0 &&
+        strcmp(confirmation, "Yes")!=0)
+    {
+        printf("Student deletion was cancelled.\n");
+        return;
+    }
+
+    for (index=student_index; index<student_count-1; index++)
+    {
+        students[index]=students[index+1];
+    }
+
+    student_count--;
+
+    memset(
+        &students[student_count],
+        0,
+        sizeof(students[student_count])
+    );
+
+    printf("Student deleted successfully.\n");
+}
+
 static void admin_students_menu(void)
 {
     int option;
@@ -584,7 +658,8 @@ static void admin_students_menu(void)
         printf("----------------------------------------\n");
         printf("1. List students\n");
         printf("2. Register a student\n");
-        printf("3. Go back\n");
+	printf("3. Delete a student\n");
+        printf("4. Go back\n");
 
         option=read_int("Enter an option: ");
 
@@ -598,8 +673,12 @@ static void admin_students_menu(void)
         }
         else if (option==3)
         {
-            return;
+            delete_student();
         }
+	else if (option==4)
+	{
+    	    return;
+	}
         else
         {
             printf("Invalid option. Please try again.\n");
