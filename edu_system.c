@@ -10,6 +10,8 @@
 #define MAX_ENROLLED 400
 #define STR_SIZE 128
 #define SMALL_SIZE 64
+#define ADMIN_USERNAME "admin"
+#define ADMIN_PASSWORD "admin123"
 
 typedef struct
 {
@@ -114,6 +116,10 @@ static int find_course_index(const char *course_id);
 
 static void initialize_sample_data(void);
 static void show_data_summary(void);
+
+static void login_student(void);
+static void login_faculty(void);
+static void login_admin(void);
 
 static void trim(char *text);
 static void read_line(const char *prompt, char *output, size_t size);
@@ -266,11 +272,124 @@ static void show_data_summary(void)
     );
 }
 
+static void login_student(void)
+{
+    char username[SMALL_SIZE];
+    char password[STR_SIZE];
+    int index;
+
+    read_line(
+        "Enter student ID: ",
+        username,
+        sizeof(username)
+    );
+
+    index=find_student_index(username);
+
+    if (index==-1)
+    {
+        printf("Student ID not found.\n");
+        return;
+    }
+
+    read_line(
+        "Enter password: ",
+        password,
+        sizeof(password)
+    );
+
+    if (strcmp(password, students[index].password)!=0)
+    {
+        printf("Incorrect password.\n");
+        return;
+    }
+
+    printf("\nLogin successful.\n");
+    printf(
+        "Welcome %s %s.\n",
+        students[index].first_name,
+        students[index].last_name
+    );
+}
+
+static void login_faculty(void)
+{
+    char username[SMALL_SIZE];
+    char password[STR_SIZE];
+    int index;
+
+    read_line(
+        "Enter faculty ID: ",
+        username,
+        sizeof(username)
+    );
+
+    index=find_faculty_index(username);
+
+    if (index==-1)
+    {
+        printf("Faculty ID not found.\n");
+        return;
+    }
+
+    read_line(
+        "Enter password: ",
+        password,
+        sizeof(password)
+    );
+
+    if (strcmp(password, faculty_members[index].password)!=0)
+    {
+        printf("Incorrect password.\n");
+        return;
+    }
+
+    printf("\nLogin successful.\n");
+    printf(
+        "Welcome Professor %s %s.\n",
+        faculty_members[index].first_name,
+        faculty_members[index].last_name
+    );
+}
+
+static void login_admin(void)
+{
+    char username[SMALL_SIZE];
+    char password[STR_SIZE];
+
+    read_line(
+        "Enter admin username: ",
+        username,
+        sizeof(username)
+    );
+
+    if (strcmp(username, ADMIN_USERNAME)!=0)
+    {
+        printf("Admin username not found.\n");
+        return;
+    }
+
+    read_line(
+        "Enter password: ",
+        password,
+        sizeof(password)
+    );
+
+    if (strcmp(password, ADMIN_PASSWORD)!=0)
+    {
+        printf("Incorrect password.\n");
+        return;
+    }
+
+    printf("\nLogin successful.\n");
+    printf("Welcome admin.\n");
+}
+
 int main(void)
 {
     int option;
 
-        initialize_sample_data();
+    initialize_sample_data();
     show_data_summary();
 
     while (1)
@@ -279,16 +398,16 @@ int main(void)
         option = read_int("Enter an option: ");
 
         if (option==1)
-        {
-            printf("Student login will be added later.\n");
+	{
+    	    login_student();
         }
         else if (option==2)
         {
-            printf("Faculty login will be added later.\n");
+            login_faculty();
         }
         else if (option==3)
         {
-            printf("Admin login will be added later.\n");
+            login_admin();
         }
         else if (option==4)
         {
