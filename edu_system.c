@@ -127,6 +127,11 @@ static void register_faculty(void);
 static void delete_faculty(void);
 static void admin_faculty_menu(void);
 
+static void list_courses(void);
+static void register_course(void);
+static void delete_course(void);
+static void admin_courses_menu(void);
+
 static void login_student(void);
 static void login_faculty(void);
 static void login_admin(void);
@@ -997,6 +1002,274 @@ static void admin_faculty_menu(void)
     }
 }
 
+static void list_courses(void)
+{
+    int index;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Courses List\n");
+    printf("----------------------------------------\n");
+
+    if (course_count==0)
+    {
+        printf("No courses have been registered.\n");
+        return;
+    }
+
+    for (index=0; index<course_count; index++)
+    {
+        printf("\nCourse number %d\n", index+1);
+        printf("Course name: %s\n", courses[index].name);
+        printf("Course ID: %s\n", courses[index].course_id);
+        printf("Units: %d\n", courses[index].units);
+        printf(
+            "Prerequisites: %s\n",
+            courses[index].prerequisites
+        );
+        printf("Section: %s\n", courses[index].section);
+        printf("Field: %s\n", courses[index].field);
+        printf(
+            "Department: %s\n",
+            courses[index].department
+        );
+    }
+
+    printf("\nTotal courses: %d\n", course_count);
+}
+
+static void register_course(void)
+{
+    Course *course;
+    char course_id[SMALL_SIZE];
+    int units;
+
+    if (course_count>=MAX_COURSES)
+    {
+        printf("Course storage is full.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Register New Course\n");
+    printf("----------------------------------------\n");
+
+    read_line(
+        "Course ID: ",
+        course_id,
+        sizeof(course_id)
+    );
+
+    if (course_id[0]=='\0')
+    {
+        printf("Course ID cannot be empty.\n");
+        return;
+    }
+
+    if (find_course_index(course_id)!=-1)
+    {
+        printf("This course ID already exists.\n");
+        return;
+    }
+
+    course=&courses[course_count];
+
+    memset(course, 0, sizeof(*course));
+
+    copy_str(
+        course->course_id,
+        course_id,
+        sizeof(course->course_id)
+    );
+
+    read_line(
+        "Course name: ",
+        course->name,
+        sizeof(course->name)
+    );
+
+    if (course->name[0]=='\0')
+    {
+        printf("Course name cannot be empty.\n");
+        memset(course, 0, sizeof(*course));
+        return;
+    }
+
+    units=read_int("Number of units: ");
+
+    if (units<=0)
+    {
+        printf(
+            "The number of units must be greater than zero.\n"
+        );
+
+        memset(course, 0, sizeof(*course));
+        return;
+    }
+
+    course->units=units;
+
+    read_line(
+        "Prerequisites: ",
+        course->prerequisites,
+        sizeof(course->prerequisites)
+    );
+
+    if (course->prerequisites[0]=='\0')
+    {
+        copy_str(
+            course->prerequisites,
+            "-",
+            sizeof(course->prerequisites)
+        );
+    }
+
+    read_line(
+        "Section: ",
+        course->section,
+        sizeof(course->section)
+    );
+
+    read_line(
+        "Field: ",
+        course->field,
+        sizeof(course->field)
+    );
+
+    read_line(
+        "Department: ",
+        course->department,
+        sizeof(course->department)
+    );
+
+    course_count++;
+
+    printf("\nCourse registered successfully.\n");
+    printf("Course ID: %s\n", course->course_id);
+}
+
+static void delete_course(void)
+{
+    char course_id[SMALL_SIZE];
+    char confirmation[SMALL_SIZE];
+    int course_index;
+    int index;
+
+    if (course_count==0)
+    {
+        printf("No courses have been registered.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Delete Course\n");
+    printf("----------------------------------------\n");
+
+    read_line(
+        "Enter course ID: ",
+        course_id,
+        sizeof(course_id)
+    );
+
+    course_index=find_course_index(course_id);
+
+    if (course_index==-1)
+    {
+        printf("Course ID not found.\n");
+        return;
+    }
+
+    printf("\nCourse information:\n");
+    printf(
+        "Course name: %s\n",
+        courses[course_index].name
+    );
+    printf(
+        "Course ID: %s\n",
+        courses[course_index].course_id
+    );
+    printf(
+        "Units: %d\n",
+        courses[course_index].units
+    );
+
+    read_line(
+        "Are you sure you want to delete this course? "
+        "(yes/no): ",
+        confirmation,
+        sizeof(confirmation)
+    );
+
+    if (strcmp(confirmation, "yes")!= 0&&
+        strcmp(confirmation, "Yes")!=0&&
+        strcmp(confirmation, "YES")!=0)
+    {
+        printf("Course deletion was cancelled.\n");
+        return;
+    }
+
+    for (
+        index=course_index;
+        index<course_count-1;
+        index++
+    )
+    {
+        courses[index]=courses[index+1];
+    }
+
+    course_count--;
+
+    memset(
+        &courses[course_count],
+        0,
+        sizeof(courses[course_count])
+    );
+
+    printf("Course deleted successfully.\n");
+}
+
+static void admin_courses_menu(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Admin: Course Management\n");
+        printf("----------------------------------------\n");
+        printf("1. List courses\n");
+        printf("2. Register a course\n");
+        printf("3. Delete a course\n");
+        printf("4. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            list_courses();
+        }
+        else if (option==2)
+        {
+            register_course();
+        }
+        else if (option==3)
+        {
+            delete_course();
+        }
+        else if (option==4)
+        {
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
+}
+
 static void admin_dashboard(void)
 {
     int option;
@@ -1041,7 +1314,7 @@ static void admin_dashboard(void)
         }
         else if (option==6)
         {
-            printf("Course management will be added later.\n");
+            admin_courses_menu();
         }
         else if (option==7)
         {
