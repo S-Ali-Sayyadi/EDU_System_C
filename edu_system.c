@@ -186,7 +186,35 @@ static void admin_dashboard(void);
 static void trim(char *text);
 static void read_line(const char *prompt, char *output, size_t size);
 static int read_int(const char *prompt);
+static double read_double(const char *prompt)
+{
+    char input[100];
+    char extra_character;
+    double value;
+
+    while (1)
+    {
+        read_line(prompt, input, sizeof(input));
+
+        if (sscanf(
+                input,
+                "%lf %c",
+                &value,
+                &extra_character
+            )==1)
+        {
+            return value;
+        }
+
+        printf("Please enter a valid number.\n");
+    }
+}
+
 static void show_main_menu(void);
+
+static void list_offering_students(int offering_index);
+static void faculty_record_grade(int faculty_index);
+static void student_report_card(int student_index);
 
 static void copy_str(char *destination,const char *source,size_t size)
 {
@@ -1516,7 +1544,7 @@ static void student_dashboard(int student_index)
         }
         else if (option==3)
         {
-            printf("Report card will be added later.\n");
+            student_report_card(student_index);
         }
         else if (option==4)
         {
@@ -1531,6 +1559,302 @@ static void student_dashboard(int student_index)
         {
             printf("Invalid option. Please try again.\n");
         }
+    }
+}
+
+static void list_offering_students(int offering_index)
+{
+    Offering *offering;
+    int enrollment_index;
+    int student_index;
+
+    if (offering_index<0 ||
+        offering_index>=offering_count)
+    {
+        printf("Offering not found.\n");
+        return;
+    }
+
+    offering=&offerings[offering_index];
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Students in Offering\n");
+    printf("----------------------------------------\n");
+
+    printf("Course ID: %s\n", offering->course_id);
+    printf("Semester: %d\n", offering->semester);
+
+    if (offering->enrolled_count==0)
+    {
+        printf("No students are enrolled in this offering.\n");
+        return;
+    }
+
+    for (
+        enrollment_index=0;
+        enrollment_index<offering->enrolled_count;
+        enrollment_index++
+    )
+    {
+        Enrollment *enrollment=
+            &offering->enrollments[enrollment_index];
+
+        student_index=find_student_index(
+            enrollment->student_id
+        );
+
+        printf(
+            "\nStudent number %d\n",
+            enrollment_index+1
+        );
+
+        printf(
+            "Student ID: %s\n",
+            enrollment->student_id
+        );
+
+        if (student_index!=-1)
+        {
+            printf(
+                "Name: %s %s\n",
+                students[student_index].first_name,
+                students[student_index].last_name
+            );
+        }
+
+        if (enrollment->grade<0)
+        {
+            printf("Grade: Not recorded\n");
+        }
+        else
+        {
+            printf(
+                "Grade: %.2f\n",
+                enrollment->grade
+            );
+        }
+    }
+}
+
+static void faculty_record_grade(int faculty_index)
+{
+    Faculty *faculty;
+    Offering *offering;
+    char student_id[SMALL_SIZE];
+    int offering_number;
+    int offering_index;
+    int enrollment_index;
+    double grade;
+
+    faculty=&faculty_members[faculty_index];
+
+    if (offering_count==0)
+    {
+        printf("No course offerings are available.\n");
+        return;
+    }
+
+    list_faculty_offerings(faculty_index);
+
+    offering_number=
+        read_int("Enter offering number: ");
+
+    offering_index=offering_number-1;
+
+    if (offering_index<0 ||
+        offering_index>=offering_count)
+    {
+        printf("Offering not found.\n");
+        return;
+    }
+
+    offering=&offerings[offering_index];
+
+    if (strcmp(
+            offering->faculty_id,
+            faculty->faculty_id
+        )!=0)
+    {
+        printf(
+            "You are not the faculty member "
+            "of this offering.\n"
+        );
+        return;
+    }
+
+    if (offering->enrolled_count==0)
+    {
+        printf(
+            "No students are enrolled in this offering.\n"
+        );
+        return;
+    }
+
+    list_offering_students(offering_index);
+
+    read_line(
+        "Enter student ID: ",
+        student_id,
+        sizeof(student_id)
+    );
+
+    enrollment_index=offering_has_student(
+        offering_index,
+        student_id
+    );
+
+    if (enrollment_index==-1)
+    {
+        printf(
+            "This student is not enrolled "
+            "in the selected offering.\n"
+        );
+        return;
+    }
+
+    grade=read_double("Enter grade (0 to 20): ");
+
+    if (grade<0.0 || grade>20.0)
+    {
+        printf(
+            "Grade must be between 0 and 20.\n"
+        );
+        return;
+    }
+
+    offering
+        ->enrollments[enrollment_index]
+        .grade=grade;
+
+    printf("\nGrade recorded successfully.\n");
+    printf("Student ID: %s\n", student_id);
+    printf("Grade: %.2f\n", grade);
+}
+
+static void student_report_card(int student_index)
+{
+    Student *student;
+    Offering *offering;
+    Enrollment *enrollment;
+    int offering_index;
+    int enrollment_index;
+    int course_index;
+    int units;
+    int total_units=0;
+    int found=0;
+    double weighted_sum=0.0;
+
+    student=&students[student_index];
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Student Report Card\n");
+    printf("----------------------------------------\n");
+
+    printf(
+        "Student: %s %s\n",
+        student->first_name,
+        student->last_name
+    );
+
+    printf(
+        "Student ID: %s\n",
+        student->student_id
+    );
+
+    for (
+        offering_index=0;
+        offering_index<offering_count;
+        offering_index++
+    )
+    {
+        enrollment_index=offering_has_student(
+            offering_index,
+            student->student_id
+        );
+
+        if (enrollment_index==-1)
+        {
+            continue;
+        }
+
+        found=1;
+
+        offering=&offerings[offering_index];
+
+        enrollment=
+            &offering->enrollments[enrollment_index];
+
+        course_index=
+            find_course_index(offering->course_id);
+
+        printf("\n");
+        printf("Course ID: %s\n", offering->course_id);
+        printf("Semester: %d\n", offering->semester);
+
+        units=0;
+
+        if (course_index!=-1)
+        {
+            units=courses[course_index].units;
+
+            printf(
+                "Course name: %s\n",
+                courses[course_index].name
+            );
+
+            printf("Units: %d\n", units);
+        }
+
+        if (enrollment->grade<0)
+        {
+            printf("Grade: Not recorded\n");
+        }
+        else
+        {
+            printf(
+                "Grade: %.2f\n",
+                enrollment->grade
+            );
+
+            if (units>0)
+            {
+                weighted_sum+=
+                    enrollment->grade*units;
+
+                total_units+=units;
+            }
+        }
+    }
+
+    if (!found)
+    {
+        printf(
+            "\nNo courses are available "
+            "in your report card.\n"
+        );
+        return;
+    }
+
+    if (total_units>0)
+    {
+        printf("\n");
+        printf(
+            "Recorded units: %d\n",
+            total_units
+        );
+
+        printf(
+            "Average: %.2f\n",
+            weighted_sum / total_units
+        );
+    }
+    else
+    {
+        printf(
+            "\nNo grades have been recorded yet.\n"
+        );
     }
 }
 
@@ -1553,10 +1877,11 @@ static void faculty_dashboard(int faculty_index)
         printf("Faculty ID: %s\n", faculty->faculty_id);
         printf("\n");
         printf("1. My offerings\n");
-        printf("2. Offerings in a semester\n");
-        printf("3. Courses\n");
-        printf("4. Offer a course\n");
-        printf("5. Log out\n");
+	printf("2. Offerings in a semester\n");
+	printf("3. Courses\n");
+	printf("4. Offer a course\n");
+	printf("5. Record a grade\n");
+	printf("6. Log out\n");
 
         option=read_int("Enter an option: ");
 
@@ -1578,9 +1903,13 @@ static void faculty_dashboard(int faculty_index)
         }
         else if (option==5)
         {
-            printf("Faculty member logged out successfully.\n");
-            return;
+            faculty_record_grade(faculty_index);
         }
+	else if (option==6)
+	{
+	    printf("Faculty member logged out successfully.\n");
+	    return;
+	}
         else
         {
             printf("Invalid option. Please try again.\n");
