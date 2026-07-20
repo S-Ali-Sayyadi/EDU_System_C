@@ -107,6 +107,8 @@ static Course courses[MAX_COURSES];
 static Offering offerings[MAX_OFFERINGS];
 static Request requests[MAX_REQUESTS];
 
+static CalendarState calendar_state={0, 0, 0, 0, 0};
+
 static int student_count = 0;
 static int faculty_count = 0;
 static int course_count = 0;
@@ -131,6 +133,10 @@ static void list_requests(void);
 static void approve_request(void);
 static void reject_request(void);
 static void admin_requests_menu(void);
+
+static const char *calendar_status(int enabled);
+static void admin_calendar_menu(void);
+static void student_course_survey(int student_index);
 
 static int course_is_in_use(const char *course_id);
 static int faculty_is_in_use(const char *faculty_id);
@@ -712,8 +718,15 @@ static void faculty_offer_course_request(
     int semester;
     int index;
 
-    faculty=
-        &faculty_members[faculty_index];
+    faculty=&faculty_members[faculty_index];
+
+        if (!calendar_state.offering)
+       {
+        printf(
+        "Course offering time is disabled.\n"
+        );
+        return;
+        }
 
     if (request_count>=MAX_REQUESTS)
     {
@@ -1284,6 +1297,15 @@ static void student_enroll_course(int student_index)
 
     student=&students[student_index];
 
+        if (!calendar_state.unit_selection)
+        {
+         printf(
+        "Unit selection is disabled. "
+        "You cannot enroll now.\n"
+        );
+        return;
+        }
+
     if (offering_count==0)
     {
         printf("No course offerings are available.\n");
@@ -1394,6 +1416,15 @@ static void student_withdraw_course(int student_index)
 
     student=&students[student_index];
 
+        if (!calendar_state.unit_selection)
+        {
+        printf(
+        "Unit selection is disabled. "
+        "You cannot withdraw now.\n"
+        );
+        return;
+        }
+ 
     if (!student_is_enrolled(student->student_id))
     {
         printf(
@@ -1508,6 +1539,229 @@ static void student_offerings_menu(int student_index)
     }
 }
 
+static void student_course_survey(int student_index)
+{
+    Student *student;
+    Offering *offering;
+    Enrollment *enrollment;
+    char confirmation[SMALL_SIZE];
+    int semester;
+    int offering_number;
+    int offering_index;
+    int enrollment_index;
+    int course_index;
+    int faculty_index;
+    int score;
+    int index;
+    int found=0;
+
+    student=&students[student_index];
+
+    if (!calendar_state.course_survey)
+    {
+        printf("Course survey time is disabled.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Student: Course Survey\n");
+    printf("----------------------------------------\n");
+
+    semester=
+        read_int("Enter semester number: ");
+
+    if (semester<=0)
+    {
+        printf(
+            "Semester number must be greater than zero.\n"
+        );
+        return;
+    }
+
+    printf(
+        "\nGraded courses available for survey "
+        "in semester %d:\n",
+        semester
+    );
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (offerings[index].semester!=semester)
+        {
+            continue;
+        }
+
+        enrollment_index=offering_has_student(
+            index,
+            student->student_id
+        );
+
+        if (enrollment_index==-1)
+        {
+            continue;
+        }
+
+        enrollment=
+            &offerings[index]
+                .enrollments[enrollment_index];
+
+        if (enrollment->grade<0)
+        {
+            continue;
+        }
+
+        course_index=find_course_index(
+            offerings[index].course_id
+        );
+
+        faculty_index=find_faculty_index(
+            offerings[index].faculty_id
+        );
+
+        printf("\nOffering number: %d\n", index + 1);
+        printf(
+            "Course ID: %s\n",
+            offerings[index].course_id
+        );
+
+        if (course_index!=-1)
+        {
+            printf(
+                "Course name: %s\n",
+                courses[course_index].name
+            );
+        }
+
+        if (faculty_index!=-1)
+        {
+            printf(
+                "Faculty: %s %s\n",
+                faculty_members[faculty_index].first_name,
+                faculty_members[faculty_index].last_name
+            );
+        }
+
+        printf(
+            "Grade: %.2f\n",
+            enrollment->grade
+        );
+
+        if (enrollment->survey_score<0)
+        {
+            printf("Survey score: Not submitted\n");
+        }
+        else
+        {
+            printf(
+                "Survey score: %d\n",
+                enrollment->survey_score
+            );
+        }
+
+        found=1;
+    }
+
+    if (!found)
+    {
+        printf(
+            "\nNo graded enrolled course is available "
+            "for survey in this semester.\n"
+        );
+        return;
+    }
+
+    offering_number=
+        read_int("Enter offering number: ");
+
+    offering_index=offering_number-1;
+
+    if (offering_index<0 ||
+        offering_index>=offering_count)
+    {
+        printf("Offering not found.\n");
+        return;
+    }
+
+    offering=&offerings[offering_index];
+
+    if (offering->semester!=semester)
+    {
+        printf(
+            "The selected offering is not "
+            "in this semester.\n"
+        );
+        return;
+    }
+
+    enrollment_index=offering_has_student(
+        offering_index,
+        student->student_id
+    );
+
+    if (enrollment_index==-1)
+    {
+        printf(
+            "You are not enrolled in this offering.\n"
+        );
+        return;
+    }
+
+    enrollment=
+        &offering->enrollments[enrollment_index];
+
+    if (enrollment->grade<0)
+    {
+        printf(
+            "You cannot survey a course before "
+            "its grade is recorded.\n"
+        );
+        return;
+    }
+
+    if (enrollment->survey_score>=0)
+    {
+        printf(
+            "Your current survey score is %d.\n",
+            enrollment->survey_score
+        );
+
+        read_line(
+            "Replace the previous survey score? "
+            "(yes/no): ",
+            confirmation,
+            sizeof(confirmation)
+        );
+
+        if (strcmp(confirmation, "yes")!=0 &&
+            strcmp(confirmation, "Yes")!=0 &&
+            strcmp(confirmation, "YES")!=0)
+        {
+            printf(
+                "Survey replacement was cancelled.\n"
+            );
+            return;
+        }
+    }
+
+    score=
+        read_int("Enter survey score (1 to 10): ");
+
+    if (score<1 || score>10)
+    {
+        printf(
+            "Survey score must be between 1 and 10.\n"
+        );
+        return;
+    }
+
+    enrollment->survey_score=score;
+
+    printf("\nSurvey submitted successfully.\n");
+    printf("Course ID: %s\n", offering->course_id);
+    printf("Survey score: %d\n", score);
+}
+
 static void student_dashboard(int student_index)
 {
     int option;
@@ -1548,7 +1802,7 @@ static void student_dashboard(int student_index)
         }
         else if (option==4)
         {
-            printf("Course survey will be added later.\n");
+            student_course_survey(student_index);
         }
         else if (option==5)
         {
@@ -1648,6 +1902,12 @@ static void faculty_record_grade(int faculty_index)
     double grade;
 
     faculty=&faculty_members[faculty_index];
+
+        if (!calendar_state.grade_recording)
+        {
+        printf("Grade recording time is disabled.\n");
+        return;
+        }
 
     if (offering_count==0)
     {
@@ -2816,6 +3076,127 @@ static void admin_courses_menu(void)
     }
 }
 
+static const char *calendar_status(int enabled)
+{
+    if (enabled)
+    {
+        return "enabled";
+    }
+
+    return "disabled";
+}
+
+static void admin_calendar_menu(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Admin: Academic Calendar\n");
+        printf("----------------------------------------\n");
+
+        printf(
+            "1. Course offering: %s\n",
+            calendar_status(calendar_state.offering)
+        );
+
+        printf(
+            "2. Unit selection: %s\n",
+            calendar_status(calendar_state.unit_selection)
+        );
+
+        printf(
+            "3. Classes and exams: %s\n",
+            calendar_status(calendar_state.classes_exams)
+        );
+
+        printf(
+            "4. Grade recording: %s\n",
+            calendar_status(calendar_state.grade_recording)
+        );
+
+        printf(
+            "5. Course survey: %s\n",
+            calendar_status(calendar_state.course_survey)
+        );
+
+        printf("6. Go back\n");
+
+        option=read_int("Enter an option to toggle: ");
+
+        if (option==1)
+        {
+            calendar_state.offering=
+                !calendar_state.offering;
+
+            printf(
+                "Course offering is now %s.\n",
+                calendar_status(calendar_state.offering)
+            );
+        }
+        else if (option==2)
+        {
+            calendar_state.unit_selection=
+                !calendar_state.unit_selection;
+
+            printf(
+                "Unit selection is now %s.\n",
+                calendar_status(
+                    calendar_state.unit_selection
+                )
+            );
+        }
+        else if (option==3)
+        {
+            calendar_state.classes_exams=
+                !calendar_state.classes_exams;
+
+            printf(
+                "Classes and exams are now %s.\n",
+                calendar_status(
+                    calendar_state.classes_exams
+                )
+            );
+        }
+        else if (option==4)
+        {
+            calendar_state.grade_recording=
+                !calendar_state.grade_recording;
+
+            printf(
+                "Grade recording is now %s.\n",
+                calendar_status(
+                    calendar_state.grade_recording
+                )
+            );
+        }
+        else if (option==5)
+        {
+            calendar_state.course_survey=
+                !calendar_state.course_survey;
+
+            printf(
+                "Course survey is now %s.\n",
+                calendar_status(
+                    calendar_state.course_survey
+                )
+            );
+        }
+        else if (option==6)
+        {
+            return;
+        }
+        else
+        {
+            printf(
+                "Invalid option. Please try again.\n"
+            );
+        }
+    }
+}
+
 static void admin_dashboard(void)
 {
     int option;
@@ -2840,7 +3221,7 @@ static void admin_dashboard(void)
 
         if (option==1)
         {
-            printf("Academic calendar will be added later.\n");
+            admin_calendar_menu();
         }
         else if (option==2)
         {
