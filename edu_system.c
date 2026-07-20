@@ -103,16 +103,36 @@ typedef struct
 static Student students[MAX_STUDENTS];
 static Faculty faculty_members[MAX_FACULTY];
 static Course courses[MAX_COURSES];
+static Offering offerings[MAX_OFFERINGS];
+static Request requests[MAX_REQUESTS];
 
-static int student_count=0;
-static int faculty_count=0;
-static int course_count=0;
+static int student_count = 0;
+static int faculty_count = 0;
+static int course_count = 0;
+static int offering_count = 0;
+static int request_count = 0;
+static int next_request_id = 1;
 
 static void copy_str(char *destination, const char *source, size_t size);
 
 static int find_student_index(const char *student_id);
 static int find_faculty_index(const char *faculty_id);
 static int find_course_index(const char *course_id);
+static int find_request_index(int request_id);
+
+static void print_offering(const Offering *offering, int number);
+static void list_offerings(void);
+static void list_faculty_offerings(int faculty_index);
+
+static void faculty_offer_course_request(int faculty_index);
+
+static void list_requests(void);
+static void approve_request(void);
+static void reject_request(void);
+static void admin_requests_menu(void);
+
+static int course_is_in_use(const char *course_id);
+static int faculty_is_in_use(const char *faculty_id);
 
 static void initialize_sample_data(void);
 static void show_data_summary(void);
@@ -209,6 +229,66 @@ static int find_course_index(const char *course_id)
     return -1;
 }
 
+static int find_request_index(int request_id)
+{
+    int index;
+
+    for (index=0; index<request_count; index++)
+    {
+        if (requests[index].id==request_id)
+        {
+            return index;
+        }
+    }
+    return -1;
+}
+
+static int course_is_in_use(const char *course_id)
+{
+    int index;
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (strcmp(offerings[index].course_id, course_id)==0)
+        {
+            return 1;
+        }
+    }
+
+    for (index=0; index<request_count; index++)
+    {
+        if (strcmp(requests[index].course_id, course_id)==0 &&
+            strcmp(requests[index].status, "pending")==0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int faculty_is_in_use(const char *faculty_id)
+{
+    int index;
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (strcmp(offerings[index].faculty_id, faculty_id)==0)
+        {
+            return 1;
+        }
+    }
+
+    for (index=0; index<request_count; index++)
+    {
+        if (strcmp(requests[index].faculty_id, faculty_id)==0 &&
+            strcmp(requests[index].status, "pending")==0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void initialize_sample_data(void)
 {
     Student *student;
@@ -291,6 +371,654 @@ static void show_data_summary(void)
     );
 }
 
+static void print_offering(
+    const Offering *offering,
+    int number
+)
+{
+    int course_index;
+    int faculty_index;
+
+    course_index=
+        find_course_index(offering->course_id);
+
+    faculty_index=
+        find_faculty_index(offering->faculty_id);
+
+    printf("\nOffering number %d\n", number);
+
+    printf(
+        "Course ID: %s\n",
+        offering->course_id
+    );
+
+    if (course_index!=-1)
+    {
+        printf(
+            "Course name: %s\n",
+            courses[course_index].name
+        );
+    }
+
+    printf(
+        "Faculty ID: %s\n",
+        offering->faculty_id
+    );
+
+    if (faculty_index!=-1)
+    {
+        printf(
+            "Faculty name: %s %s\n",
+            faculty_members[faculty_index].first_name,
+            faculty_members[faculty_index].last_name
+        );
+    }
+
+    printf(
+        "Semester: %d\n",
+        offering->semester
+    );
+
+    printf(
+        "Capacity: %d\n",
+        offering->capacity
+    );
+
+    printf(
+        "Enrolled students: %d\n",
+        offering->enrolled_count
+    );
+
+    printf(
+        "Department: %s\n",
+        offering->department
+    );
+
+    printf(
+        "Place: %s\n",
+        offering->place
+    );
+}
+
+static void list_offerings(void)
+{
+    int index;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Course Offerings\n");
+    printf("----------------------------------------\n");
+
+    if (offering_count==0)
+    {
+        printf("No course offerings are available.\n");
+        return;
+    }
+
+    for (index=0; index<offering_count; index++)
+    {
+        print_offering(
+            &offerings[index],
+            index+1
+        );
+    }
+
+    printf(
+        "\nTotal offerings: %d\n",
+        offering_count
+    );
+}
+
+static void list_faculty_offerings(int faculty_index)
+{
+    int index;
+    int found=0;
+    Faculty *faculty=
+        &faculty_members[faculty_index];
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("My Course Offerings\n");
+    printf("----------------------------------------\n");
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (strcmp(
+                offerings[index].faculty_id,
+                faculty->faculty_id
+            )==0)
+        {
+            print_offering(
+                &offerings[index],
+                index+1
+            );
+
+            found=1;
+        }
+    }
+
+    if (!found)
+    {
+        printf(
+            "You do not have any approved offerings.\n"
+        );
+    }
+}
+
+static void faculty_offer_course_request(
+    int faculty_index
+)
+{
+    Faculty *faculty;
+    Course *course;
+    Request *request;
+    char course_id[SMALL_SIZE];
+    char place[STR_SIZE];
+    int course_index;
+    int capacity;
+    int semester;
+    int index;
+
+    faculty=
+        &faculty_members[faculty_index];
+
+    if (request_count>=MAX_REQUESTS)
+    {
+        printf("Request storage is full.\n");
+        return;
+    }
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Request a Course Offering\n");
+    printf("----------------------------------------\n");
+
+    list_courses();
+
+    read_line(
+        "Enter course ID: ",
+        course_id,
+        sizeof(course_id)
+    );
+
+    course_index=
+        find_course_index(course_id);
+
+    if (course_index==-1)
+    {
+        printf("Course ID not found.\n");
+        return;
+    }
+
+    course=&courses[course_index];
+
+    capacity=
+        read_int("Enter capacity: ");
+
+    if (capacity<=0)
+    {
+        printf(
+            "Capacity must be greater than zero.\n"
+        );
+        return;
+    }
+
+    if (capacity>MAX_ENROLLED)
+    {
+        printf(
+            "Capacity cannot be greater than %d.\n",
+            MAX_ENROLLED
+        );
+        return;
+    }
+
+    semester=
+        read_int("Enter semester number: ");
+
+    if (semester<=0)
+    {
+        printf(
+            "Semester number must be greater than zero.\n"
+        );
+        return;
+    }
+
+    read_line(
+        "Enter class place: ",
+        place,
+        sizeof(place)
+    );
+
+    if (place[0]=='\0')
+    {
+        copy_str(
+            place,
+            "TBD",
+            sizeof(place)
+        );
+    }
+
+    for (index=0; index<request_count; index++)
+    {
+        if (strcmp(
+                requests[index].type,
+                "offer"
+            )==0 &&
+            strcmp(
+                requests[index].course_id,
+                course_id
+            )==0 &&
+            strcmp(
+                requests[index].faculty_id,
+                faculty->faculty_id
+            )==0 &&
+            requests[index].semester == semester &&
+            strcmp(
+                requests[index].status,
+                "pending"
+            )==0)
+        {
+            printf(
+                "A pending request for this offering "
+                "already exists.\n"
+            );
+            return;
+        }
+    }
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (strcmp(
+                offerings[index].course_id,
+                course_id
+            )==0 &&
+            strcmp(
+                offerings[index].faculty_id,
+                faculty->faculty_id
+            )==0 &&
+            offerings[index].semester==semester)
+        {
+            printf(
+                "This course offering already exists.\n"
+            );
+            return;
+        }
+    }
+
+    request=
+        &requests[request_count];
+
+    memset(
+        request,
+        0,
+        sizeof(*request)
+    );
+
+    request->id=
+        next_request_id++;
+
+    copy_str(
+        request->type,
+        "offer",
+        sizeof(request->type)
+    );
+
+    copy_str(
+        request->course_id,
+        course_id,
+        sizeof(request->course_id)
+    );
+
+    copy_str(
+        request->faculty_id,
+        faculty->faculty_id,
+        sizeof(request->faculty_id)
+    );
+
+    request->semester=semester;
+    request->capacity=capacity;
+    request->amount=0;
+    request->offering_index = -1;
+
+    copy_str(
+        request->department,
+        course->department,
+        sizeof(request->department)
+    );
+
+    copy_str(
+        request->place,
+        place,
+        sizeof(request->place)
+    );
+
+    copy_str(
+        request->status,
+        "pending",
+        sizeof(request->status)
+    );
+
+    request_count++;
+
+    printf("\nRequest sent successfully.\n");
+    printf("Request ID: %d\n", request->id);
+    printf("Status: %s\n", request->status);
+}
+
+static void list_requests(void)
+{
+    int index;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Course Offering Requests\n");
+    printf("----------------------------------------\n");
+
+    if (request_count==0)
+    {
+        printf("No requests have been submitted.\n");
+        return;
+    }
+
+    for (index=0; index<request_count; index++)
+    {
+        printf(
+            "\nRequest number %d\n",
+            index+1
+        );
+
+        printf(
+            "Request ID: %d\n",
+            requests[index].id
+        );
+
+        printf(
+            "Type: %s\n",
+            requests[index].type
+        );
+
+        printf(
+            "Course ID: %s\n",
+            requests[index].course_id
+        );
+
+        printf(
+            "Faculty ID: %s\n",
+            requests[index].faculty_id
+        );
+
+        printf(
+            "Semester: %d\n",
+            requests[index].semester
+        );
+
+        printf(
+            "Capacity: %d\n",
+            requests[index].capacity
+        );
+
+        printf(
+            "Department: %s\n",
+            requests[index].department
+        );
+
+        printf(
+            "Place: %s\n",
+            requests[index].place
+        );
+
+        printf(
+            "Status: %s\n",
+            requests[index].status
+        );
+    }
+
+    printf(
+        "\nTotal requests: %d\n",
+        request_count
+    );
+}
+
+static void approve_request(void)
+{
+    Request *request;
+    Offering *offering;
+    int request_id;
+    int request_index;
+    int course_index;
+    int faculty_index;
+    int index;
+
+    if (request_count==0)
+    {
+        printf("No requests have been submitted.\n");
+        return;
+    }
+
+    request_id=
+        read_int("Enter request ID: ");
+
+    request_index=
+        find_request_index(request_id);
+
+    if (request_index==-1)
+    {
+        printf("Request ID not found.\n");
+        return;
+    }
+
+    request=
+        &requests[request_index];
+
+    if (strcmp(request->status, "pending")!=0)
+    {
+        printf(
+            "This request has already been processed.\n"
+        );
+        return;
+    }
+
+    if (strcmp(request->type, "offer")!=0)
+    {
+        printf("Unsupported request type.\n");
+        return;
+    }
+
+    course_index=
+        find_course_index(request->course_id);
+
+    if (course_index==-1)
+    {
+        printf(
+            "The requested course no longer exists.\n"
+        );
+        return;
+    }
+
+    faculty_index=
+        find_faculty_index(request->faculty_id);
+
+    if (faculty_index==-1)
+    {
+        printf(
+            "The faculty member no longer exists.\n"
+        );
+        return;
+    }
+
+    if (offering_count>=MAX_OFFERINGS)
+    {
+        printf("Offering storage is full.\n");
+        return;
+    }
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (strcmp(
+                offerings[index].course_id,
+                request->course_id
+            )==0 &&
+            strcmp(
+                offerings[index].faculty_id,
+                request->faculty_id
+            )==0 &&
+            offerings[index].semester==
+                request->semester)
+        {
+            printf(
+                "This offering already exists.\n"
+            );
+            return;
+        }
+    }
+
+    offering=
+        &offerings[offering_count];
+
+    memset(
+        offering,
+        0,
+        sizeof(*offering)
+    );
+
+    copy_str(
+        offering->course_id,
+        request->course_id,
+        sizeof(offering->course_id)
+    );
+
+    copy_str(
+        offering->faculty_id,
+        request->faculty_id,
+        sizeof(offering->faculty_id)
+    );
+
+    offering->semester=
+        request->semester;
+
+    offering->capacity=
+        request->capacity;
+
+    offering->enrolled_count=0;
+
+    copy_str(
+        offering->department,
+        request->department,
+        sizeof(offering->department)
+    );
+
+    copy_str(
+        offering->place,
+        request->place,
+        sizeof(offering->place)
+    );
+
+    request->offering_index=
+        offering_count;
+
+    offering_count++;
+
+    copy_str(
+        request->status,
+        "approved",
+        sizeof(request->status)
+    );
+
+    printf("\nRequest approved successfully.\n");
+    printf(
+        "A new course offering was created.\n"
+    );
+}
+
+static void reject_request(void)
+{
+    Request *request;
+    int request_id;
+    int request_index;
+
+    if (request_count==0)
+    {
+        printf("No requests have been submitted.\n");
+        return;
+    }
+
+    request_id=
+        read_int("Enter request ID: ");
+
+    request_index=
+        find_request_index(request_id);
+
+    if (request_index==-1)
+    {
+        printf("Request ID not found.\n");
+        return;
+    }
+
+    request=
+        &requests[request_index];
+
+    if (strcmp(request->status, "pending")!=0)
+    {
+        printf(
+            "This request has already been processed.\n"
+        );
+        return;
+    }
+
+    copy_str(
+        request->status,
+        "rejected",
+        sizeof(request->status)
+    );
+
+    printf("Request rejected successfully.\n");
+}
+
+static void admin_requests_menu(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Admin: Request Management\n");
+        printf("----------------------------------------\n");
+        printf("1. List requests\n");
+        printf("2. Approve a request\n");
+        printf("3. Reject a request\n");
+        printf("4. Go back\n");
+
+        option =
+            read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            list_requests();
+        }
+        else if (option==2)
+        {
+            list_requests();
+            approve_request();
+        }
+        else if (option==3)
+        {
+            list_requests();
+            reject_request();
+        }
+        else if (option==4)
+        {
+            return;
+        }
+        else
+        {
+            printf(
+                "Invalid option. Please try again.\n"
+            );
+        }
+    }
+}
+
 static void student_dashboard(int student_index)
 {
     int option;
@@ -319,11 +1047,11 @@ static void student_dashboard(int student_index)
 
         if (option==1)
         {
-            printf("Student offerings will be added later.\n");
+             list_offerings();
         }
         else if (option==2)
         {
-            printf("Course list will be added later.\n");
+              list_courses();
         }
         else if (option==3)
         {
@@ -373,7 +1101,7 @@ static void faculty_dashboard(int faculty_index)
 
         if (option==1)
         {
-            printf("Faculty offerings will be added later.\n");
+             list_faculty_offerings(faculty_index);
         }
         else if (option==2)
         {
@@ -381,11 +1109,11 @@ static void faculty_dashboard(int faculty_index)
         }
         else if (option==3)
         {
-            printf("Course list will be added later.\n");
+             list_courses();
         }
         else if (option==4)
         {
-            printf("Course offering request will be added later.\n");
+            faculty_offer_course_request(faculty_index);
         }
         else if (option==5)
         {
@@ -909,6 +1637,15 @@ static void delete_faculty(void)
         return;
     }
 
+        if (faculty_is_in_use(faculty_id))
+        {
+            printf(
+            "This faculty member cannot be deleted because "
+            "they have an offering or pending request.\n"
+            );
+            return;
+        }
+
     printf("\nFaculty member information:\n");
 
     printf(
@@ -1180,6 +1917,15 @@ static void delete_course(void)
         printf("Course ID not found.\n");
         return;
     }
+ 
+         if (course_is_in_use(course_id))
+        {
+            printf(
+            "This course cannot be deleted because it is used "
+            "in an offering or pending request.\n"
+           );
+           return;
+         }
 
     printf("\nCourse information:\n");
     printf(
@@ -1306,11 +2052,11 @@ static void admin_dashboard(void)
         }
         else if (option==4)
         {
-            printf("Request management will be added later.\n");
+            admin_requests_menu();
         }
         else if (option==5)
         {
-            printf("Offering management will be added later.\n");
+            list_offerings();
         }
         else if (option==6)
         {
