@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 #define MAX_STUDENTS 1000
 #define MAX_FACULTY 500
@@ -13,6 +14,9 @@
 #define ADMIN_USERNAME "admin"
 #define ADMIN_PASSWORD "admin123"
 #define PASSING_GRADE 10.0
+#define LINE_SIZE 8192
+#define DATA_FILE "edu_data.json"
+#define DATA_TEMP_FILE "edu_data.json.tmp"
 
 typedef struct
 {
@@ -100,6 +104,16 @@ typedef struct
     int grade_recording;
     int course_survey;
 } CalendarState;
+
+static void json_write_string(FILE *file,const char *text);
+static void json_write_key_string(FILE *file,const char *key,const char *value);
+static void begin_json_record(FILE *file,int *first_record);
+static const char *skip_json_spaces(const char *text);
+static int next_json_string(const char **cursor,char *output,size_t size);
+static int next_json_int(const char **cursor,int *output);
+static int next_json_double(const char **cursor,double *output);
+static int save_all(void);
+static int load_all(void);
 
 static Student students[MAX_STUDENTS];
 static Faculty faculty_members[MAX_FACULTY];
@@ -367,6 +381,8 @@ static void recover_student_password(void)
 
     copy_str(student->password,new_password,sizeof(student->password));
 
+    save_all();
+
     printf("Student password changed successfully.\n");
 }
 
@@ -417,6 +433,8 @@ static void recover_faculty_password(void)
     }
 
     copy_str(faculty->password,new_password,sizeof(faculty->password));
+
+    save_all();
 
     printf("Faculty password changed successfully.\n");
 }
@@ -700,6 +718,794 @@ static int faculty_is_in_use(const char *faculty_id)
     return 0;
 }
 
+static void json_write_string(FILE *file,const char *text)
+{
+    const unsigned char *cursor;
+
+    if (text==NULL)
+    {
+        text="";
+    }
+
+    cursor=(const unsigned char *)text;
+    fputc('"', file);
+
+    while (*cursor!='\0')
+    {
+        if (*cursor=='"' || *cursor=='\\')
+        {
+            fputc('\\', file);
+            fputc(*cursor, file);
+        }
+        else if (*cursor=='\n')
+        {
+            fputs("\\n", file);
+        }
+        else if (*cursor=='\r')
+        {
+            fputs("\\r", file);
+        }
+        else if (*cursor=='\t')
+        {
+            fputs("\\t", file);
+        }
+        else if (*cursor<32)
+        {
+            fprintf(
+                file,
+                "\\u%04x",
+                (unsigned int)*cursor
+            );
+        }
+        else
+        {
+            fputc(*cursor, file);
+        }
+        cursor++;
+    }
+
+    fputc('"', file);
+}
+
+static void json_write_key_string(FILE *file,const char *key,const char *value)
+{
+    json_write_string(file, key);
+    fputc(':', file);
+    json_write_string(file, value);
+}
+
+static void begin_json_record(FILE *file,int *first_record)
+{
+    if (!*first_record)
+    {
+        fputs(",\n", file);
+    }
+
+    *first_record=0;
+    fputs("  {", file);
+}
+
+static int save_all(void)
+{
+    FILE *file;
+    Student *student;
+    Faculty *faculty;
+    Course *course;
+    Offering *offering;
+    Enrollment *enrollment;
+    Request *request;
+    int first_record=1;
+    int index;
+    int enrollment_index;
+
+    file=fopen(DATA_TEMP_FILE, "w");
+
+    if (file==NULL)
+    {
+        printf("Could not save %s.\n", DATA_FILE);
+        return 0;
+    }
+
+    fputs("[\n", file);
+
+    begin_json_record(file, &first_record);
+
+    fprintf(
+        file,
+        "\"record\":\"calendar\","
+        "\"offering\":%d,"
+        "\"unit_selection\":%d,"
+        "\"classes_exams\":%d,"
+        "\"grade_recording\":%d,"
+        "\"course_survey\":%d}",
+        calendar_state.offering,
+        calendar_state.unit_selection,
+        calendar_state.classes_exams,
+        calendar_state.grade_recording,
+        calendar_state.course_survey
+    );
+
+    for (index=0; index<student_count; index++)
+    {
+        student=&students[index];
+
+        begin_json_record(file, &first_record);
+
+        fputs("\"record\":\"student\",", file);
+
+        json_write_key_string(file,"first_name",student->first_name);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"last_name",student->last_name);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"student_id",student->student_id);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"national_code",student->national_code);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"field",student->field);
+
+        fprintf(file,",\"entrance_year\":%d,",student->entrance_year);
+
+        json_write_key_string(file,"section",student->section);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"mentor",student->mentor);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"department",student->department);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"answer_birth",student->answer_birth);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"answer_book",student->answer_book);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"answer_bike",student->answer_bike);
+        
+	fputc(',', file);
+
+        json_write_key_string(file,"password",student->password);
+
+        fputc('}', file);
+    }
+
+
+        for (index=0; index<faculty_count; index++)
+    {
+        faculty=&faculty_members[index];
+
+        begin_json_record(file, &first_record);
+
+        fputs("\"record\":\"faculty\",", file);
+
+        json_write_key_string(file,"first_name",faculty->first_name);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"last_name",faculty->last_name);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"faculty_id",faculty->faculty_id);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"national_code",faculty->national_code);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"field",faculty->field);
+
+        fprintf(file,",\"entrance_year\":%d,",faculty->entrance_year);
+
+        json_write_key_string(file,"degree",faculty->degree);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"department",faculty->department);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"password",faculty->password);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"answer_birth",faculty->answer_birth);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"answer_book",faculty->answer_book);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"answer_bike",faculty->answer_bike);
+
+        fputc('}', file);
+    }
+
+    for (index=0; index<course_count; index++)
+    {
+        course=&courses[index];
+
+        begin_json_record(file, &first_record);
+
+        fputs("\"record\":\"course\",", file);
+
+        json_write_key_string(file,"name",course->name);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"course_id",course->course_id);
+
+        fprintf(file,",\"units\":%d,",course->units);
+
+        json_write_key_string(file,"prerequisites",course->prerequisites);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"section",course->section);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"field",course->field);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"department",course->department);
+
+        fputc('}', file);
+    }
+
+
+    for (index=0; index<offering_count; index++)
+    {
+        offering=&offerings[index];
+
+        begin_json_record(file, &first_record);
+
+        fprintf(file,"\"record\":\"offering\",""\"index\":%d,", index);
+
+        json_write_key_string(file,"course_id",offering->course_id);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"faculty_id",offering->faculty_id);
+
+        fprintf(file,",\"semester\":%d,""\"capacity\":%d,",offering->semester,offering->capacity);
+
+        json_write_key_string(file,"department",offering->department);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"place",offering->place);
+
+        fputc('}', file);
+
+        for (
+            enrollment_index=0;
+            enrollment_index<offering->enrolled_count;
+            enrollment_index++)
+        {
+            enrollment=&offering->enrollments[enrollment_index];
+
+            begin_json_record(file, &first_record);
+
+            fprintf(file,"\"record\":\"enrollment\",""\"offering_index\":%d,",index);
+
+            json_write_key_string(file, "student_id", enrollment->student_id);
+
+            fprintf(file,",\"grade\":%.17g," "\"survey_score\":%d}", enrollment->grade,enrollment->survey_score);
+        }
+    }
+
+    for (index=0; index<request_count; index++)
+    {
+        request=&requests[index];
+
+        begin_json_record(file, &first_record);
+
+        fprintf(file,"\"record\":\"request\",""\"id\":%d,",request->id);
+
+        json_write_key_string(file,"type",request->type);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"course_id",request->course_id);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"faculty_id", request->faculty_id);
+
+        fprintf(
+            file,
+            ",\"semester\":%d,"
+            "\"capacity\":%d,"
+            "\"amount\":%d,"
+            "\"offering_index\":%d,",
+            request->semester,
+            request->capacity,
+            request->amount,
+            request->offering_index
+        );
+
+        json_write_key_string(file,"department",request->department);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"place",request->place);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"status",request->status);
+
+        fputc('}', file);
+    }
+
+    fputs("\n]\n", file);
+
+    if (fclose(file)!=0)
+    {
+        remove(DATA_TEMP_FILE);
+        printf("Could not finish writing %s.\n", DATA_FILE);
+        return 0;
+    }
+
+    remove(DATA_FILE);
+
+    if (rename(DATA_TEMP_FILE, DATA_FILE)!=0)
+    {
+        printf("Could not finalize %s.\n", DATA_FILE);
+        remove(DATA_TEMP_FILE);
+        return 0;
+    }
+    return 1;
+}
+
+static const char *skip_json_spaces(
+    const char *text
+)
+{
+    while (
+        *text!='\0' &&
+        isspace((unsigned char)*text)
+    )
+    {
+        text++;
+    }
+
+    return text;
+}
+
+static int next_json_string(
+    const char **cursor,
+    char *output,
+    size_t size
+)
+{
+    const char *position;
+    size_t used=0;
+
+    if (
+        cursor==NULL ||
+        *cursor==NULL ||
+        output==NULL ||
+        size==0
+    )
+    {
+        return 0;
+    }
+
+    position=strchr(*cursor, ':');
+
+    if (position==NULL)
+    {
+        return 0;
+    }
+
+    position=skip_json_spaces(position+1);
+
+    if (*position!='"')
+    {
+        return 0;
+    }
+
+    position++;
+
+    while (
+        *position!='\0' &&
+        *position!='"'
+    )
+    {
+        char character=*position++;
+
+        if (character=='\\')
+        {
+            if (*position=='\0')
+            {
+                return 0;
+            }
+
+            character=*position++;
+
+            if (character=='n')
+            {
+                character='\n';
+            }
+            else if (character=='r')
+            {
+                character='\r';
+            }
+            else if (character=='t')
+            {
+                character='\t';
+            }
+            else if (character=='u')
+            {
+                int digit;
+
+                for (
+                    digit=0;
+                    digit<4 && isxdigit((unsigned char)*position);
+                    digit++)
+                
+                {
+                    position++;
+                }
+
+                character='?';
+            }
+        }
+
+        if (used+1<size)
+        {
+            output[used]=character;
+            used++;
+        }
+    }
+
+    if (*position!='"')
+    {
+        return 0;
+    }
+
+    output[used]='\0';
+
+    *cursor=position+1;
+
+    return 1;
+}
+
+static int next_json_int(
+    const char **cursor,
+    int *output
+)
+{
+    const char *position;
+    char *end;
+    long value;
+
+    position=strchr(*cursor, ':');
+
+    if (position==NULL)
+    {
+        return 0;
+    }
+
+    position=skip_json_spaces(position+1);
+
+    value=strtol(position, &end, 10);
+
+    if (end==position)
+    {
+        return 0;
+    }
+
+    *output=(int)value;
+    *cursor=end;
+    return 1;
+}
+
+static int next_json_double(
+    const char **cursor,
+    double *output
+)
+{
+    const char *position;
+    char *end;
+    double value;
+
+    position=strchr(*cursor, ':');
+
+    if (position==NULL)
+    {
+        return 0;
+    }
+
+    position=skip_json_spaces(position+1);
+
+    value=strtod(position, &end);
+
+    if (end==position)
+    {
+        return 0;
+    }
+
+    *output=value;
+    *cursor=end;
+
+    return 1;
+}
+
+static int load_all(void)
+{
+    FILE *file;
+    char line[LINE_SIZE];
+    int loaded_any=0;
+    int invalid_lines=0;
+
+    file=fopen(DATA_FILE, "r");
+
+    if (file==NULL)
+    {
+        return 0;
+    }
+
+    memset(students, 0, sizeof(students));
+    memset(faculty_members,0,sizeof(faculty_members));
+    memset(courses, 0, sizeof(courses));
+    memset(offerings, 0, sizeof(offerings));
+    memset(requests, 0, sizeof(requests));
+    memset(&calendar_state,0,sizeof(calendar_state));
+
+    student_count=0;
+    faculty_count=0;
+    course_count=0;
+    offering_count=0;
+    request_count=0;
+    next_request_id=1;
+
+    while (fgets(line, sizeof(line), file)!=NULL)
+    {
+        const char *cursor=line;
+        char record_type[SMALL_SIZE];
+
+        if (strchr(line, '{')==NULL)
+        {
+            continue;
+        }
+
+        if (!next_json_string(&cursor,record_type,sizeof(record_type)))
+        {
+            invalid_lines++;
+            continue;
+        }
+
+        if (strcmp(record_type, "calendar")==0)
+        {
+            if (next_json_int(&cursor, &calendar_state.offering) &&
+                next_json_int(&cursor,&calendar_state.unit_selection) &&
+                next_json_int(&cursor,&calendar_state.classes_exams) &&
+                next_json_int(&cursor,&calendar_state.grade_recording) &&
+                next_json_int(&cursor,&calendar_state.course_survey))
+            {
+                loaded_any=1;
+            }
+            else
+            {
+                invalid_lines++;
+            }
+        }
+        else if (strcmp(record_type, "student")==0 && student_count < MAX_STUDENTS)
+        {
+            Student student;
+
+            memset(&student, 0, sizeof(student));
+
+            if (
+                next_json_string(&cursor,student.first_name,sizeof(student.first_name)) &&
+                next_json_string(&cursor,student.last_name,sizeof(student.last_name)) &&
+                next_json_string(&cursor,student.student_id,sizeof(student.student_id)) &&
+                next_json_string(&cursor,student.national_code,sizeof(student.national_code)) &&
+                next_json_string(&cursor,student.field,sizeof(student.field)) &&
+                next_json_int(&cursor,&student.entrance_year) &&
+                next_json_string(&cursor,student.section,sizeof(student.section)) &&
+                next_json_string(&cursor,student.mentor,sizeof(student.mentor)) &&
+                next_json_string(&cursor,student.department,sizeof(student.department)) &&
+                next_json_string(&cursor,student.answer_birth,sizeof(student.answer_birth)) &&
+                next_json_string(&cursor,student.answer_book,sizeof(student.answer_book)) &&
+                next_json_string(&cursor,student.answer_bike,sizeof(student.answer_bike)) &&
+                next_json_string(&cursor,student.password,sizeof(student.password)))
+            {
+                students[student_count]=student;
+                student_count++;
+                loaded_any=1;
+            }
+            else
+            {
+                invalid_lines++;
+            }
+        }
+        else if (
+            strcmp(record_type, "faculty")==0 &&
+            faculty_count < MAX_FACULTY)
+        {
+            Faculty faculty;
+
+            memset(&faculty, 0, sizeof(faculty));
+
+            if (next_json_string(&cursor,faculty.first_name,sizeof(faculty.first_name)) &&
+                next_json_string(&cursor,faculty.last_name,sizeof(faculty.last_name)) &&
+                next_json_string(&cursor,faculty.faculty_id,sizeof(faculty.faculty_id)) &&
+                next_json_string(&cursor,faculty.national_code,sizeof(faculty.national_code)) &&
+                next_json_string(&cursor,faculty.field,sizeof(faculty.field)) &&
+                next_json_int(&cursor,&faculty.entrance_year) &&
+                next_json_string(&cursor,faculty.degree,sizeof(faculty.degree)) &&
+                next_json_string(&cursor,faculty.department,sizeof(faculty.department)) &&
+                next_json_string(&cursor,faculty.password,sizeof(faculty.password)) &&
+                next_json_string(&cursor,faculty.answer_birth,sizeof(faculty.answer_birth)) &&
+                next_json_string(&cursor,faculty.answer_book,sizeof(faculty.answer_book)) &&
+                next_json_string(&cursor,faculty.answer_bike,sizeof(faculty.answer_bike)))
+            
+            {
+                faculty_members[faculty_count]=faculty;
+                faculty_count++;
+                loaded_any=1;
+            }
+            else
+            {
+                invalid_lines++;
+            }
+        }
+        else if (strcmp(record_type, "course")==0 &&
+            course_count<MAX_COURSES)
+        {
+            Course course;
+
+            memset(&course, 0, sizeof(course));
+
+            if (next_json_string(&cursor,course.name,sizeof(course.name)) &&
+                next_json_string(&cursor,course.course_id,sizeof(course.course_id)) &&
+                next_json_int(&cursor,&course.units) &&
+                next_json_string(&cursor,course.prerequisites,sizeof(course.prerequisites)) &&
+                next_json_string(&cursor, course.section,sizeof(course.section)) &&
+                next_json_string(&cursor,course.field,sizeof(course.field)) &&
+                next_json_string(&cursor,course.department,sizeof(course.department)))
+            {
+                courses[course_count]=course;
+                course_count++;
+                loaded_any=1;
+            }
+            else
+            {
+                invalid_lines++;
+            }
+        }
+        else if (strcmp(record_type, "offering")==0 && offering_count<MAX_OFFERINGS)
+        {
+            Offering offering;
+            int stored_index;
+
+            memset(&offering, 0, sizeof(offering));
+
+            if (next_json_int(&cursor,&stored_index) &&
+                next_json_string(&cursor,offering.course_id,sizeof(offering.course_id)) &&
+                next_json_string(&cursor,offering.faculty_id,sizeof(offering.faculty_id)) &&
+                next_json_int(&cursor,&offering.semester) &&
+                next_json_int(&cursor,&offering.capacity) &&
+                next_json_string(&cursor,offering.department,sizeof(offering.department)) &&
+                next_json_string(&cursor,offering.place,sizeof(offering.place)))
+            {
+                (void)stored_index;
+
+                offerings[offering_count]=offering;
+                offering_count++;
+                loaded_any=1;
+            }
+            else
+            {
+                invalid_lines++;
+            }
+        }
+        else if (strcmp(record_type, "enrollment")==0)
+        {
+            char student_id[SMALL_SIZE];
+            int offering_index;
+            int survey_score;
+            double grade;
+
+            if (next_json_int(&cursor,&offering_index) &&
+                next_json_string(&cursor,student_id,sizeof(student_id)) &&
+                next_json_double(&cursor,&grade) &&
+                next_json_int(&cursor,&survey_score) &&
+                offering_index>=0 &&
+                offering_index<offering_count &&
+                offerings[offering_index].enrolled_count<MAX_ENROLLED &&
+                offerings[offering_index].enrolled_count<offerings[offering_index].capacity)
+            {
+                Enrollment *enrollment;
+
+                enrollment= &offerings[offering_index].enrollments[offerings[offering_index].enrolled_count];
+
+                copy_str(
+                    enrollment->student_id,
+                    student_id,
+                    sizeof(enrollment->student_id)
+                );
+
+                enrollment->grade=grade;
+                enrollment->survey_score=survey_score;
+
+                offerings[offering_index].enrolled_count++;
+
+                loaded_any=1;
+            }
+            else
+            {
+                invalid_lines++;
+            }
+        }
+        else if (strcmp(record_type, "request")==0 && request_count<MAX_REQUESTS)
+        {
+            Request request;
+
+            memset(&request, 0, sizeof(request));
+
+            if (next_json_int(&cursor,&request.id) &&
+                next_json_string(&cursor,request.type,sizeof(request.type)) &&
+                next_json_string(&cursor,request.course_id,sizeof(request.course_id)) &&
+                next_json_string(&cursor,request.faculty_id,sizeof(request.faculty_id)) &&
+                next_json_int(&cursor,&request.semester) &&
+                next_json_int(&cursor,&request.capacity) &&
+                next_json_int(&cursor,&request.amount) &&
+                next_json_int(&cursor,&request.offering_index) &&
+                next_json_string(&cursor,request.department,sizeof(request.department)) &&
+                next_json_string(&cursor,request.place,sizeof(request.place)) &&
+                next_json_string(&cursor,request.status,sizeof(request.status)))
+            {
+                requests[request_count]=request;
+                request_count++;
+
+                if (request.id>=next_request_id)
+                {
+                    next_request_id=request.id+1;
+                }
+
+                loaded_any=1;
+            }
+            else
+            {
+                invalid_lines++;
+            }
+        }
+    }
+
+    fclose(file);
+
+    if (invalid_lines>0)
+    {
+        printf(
+            "Warning: %d invalid data line(s) "
+            "were ignored.\n",
+            invalid_lines
+        );
+    }
+
+    return loaded_any;
+}
+
 static void initialize_sample_data(void)
 {
     Student *student;
@@ -784,13 +1590,19 @@ static void initialize_sample_data(void)
 
 static void show_data_summary(void)
 {
-    printf("\nSample data loaded successfully.\n");
+    printf("\nCurrent data summary:\n");
 
     printf(
         "Students: %d | Faculty: %d | Courses: %d\n",
         student_count,
         faculty_count,
         course_count
+    );
+
+    printf(
+        "Offerings: %d | Requests: %d\n",
+        offering_count,
+        request_count
     );
 }
 
@@ -1130,6 +1942,8 @@ static void faculty_offer_course_request(
 
     request_count++;
 
+    save_all();
+
     printf("\nRequest sent successfully.\n");
     printf("Request ID: %d\n", request->id);
     printf("Status: %s\n", request->status);
@@ -1354,6 +2168,8 @@ static void approve_request(void)
         sizeof(request->status)
     );
 
+    save_all();
+
     printf("\nRequest approved successfully.\n");
     printf(
         "A new course offering was created.\n"
@@ -1400,6 +2216,8 @@ static void reject_request(void)
         "rejected",
         sizeof(request->status)
     );
+
+    save_all();
 
     printf("Request rejected successfully.\n");
 }
@@ -1621,6 +2439,8 @@ static void student_enroll_course(int student_index)
 
     offering->enrolled_count++;
 
+    save_all();
+
     printf("\nEnrollment successful.\n");
     printf("Course ID: %s\n", offering->course_id);
     printf(
@@ -1713,6 +2533,9 @@ static void student_withdraw_course(int student_index)
         0,
         sizeof(offering->enrollments[offering->enrolled_count])
     );
+
+    save_all();
+
     printf("Withdrawal successful.\n");
 }
 
@@ -1981,6 +2804,8 @@ static void student_course_survey(int student_index)
 
     enrollment->survey_score=score;
 
+    save_all();
+
     printf("\nSurvey submitted successfully.\n");
     printf("Course ID: %s\n", offering->course_id);
     printf("Survey score: %d\n", score);
@@ -2210,6 +3035,8 @@ static void faculty_record_grade(int faculty_index)
     offering
         ->enrollments[enrollment_index]
         .grade=grade;
+
+    save_all();
 
     printf("\nGrade recorded successfully.\n");
     printf("Student ID: %s\n", student_id);
@@ -2581,6 +3408,8 @@ static void register_student(void)
 
     student_count++;
 
+        save_all();
+
     printf("\nStudent registered successfully.\n");
     printf("Student ID: %s\n", student->student_id);
 }
@@ -2664,6 +3493,8 @@ static void delete_student(void)
         0,
         sizeof(students[student_count])
     );
+
+        save_all();
 
     printf("Student deleted successfully.\n");
 }
@@ -2885,6 +3716,8 @@ static void register_faculty(void)
 
     faculty_count++;
 
+    save_all();
+
     printf("\nFaculty member registered successfully.\n");
     printf("Faculty ID: %s\n", faculty->faculty_id);
 }
@@ -2980,6 +3813,8 @@ static void delete_faculty(void)
         0,
         sizeof(faculty_members[faculty_count])
     );
+
+    save_all();
 
     printf("Faculty member deleted successfully.\n");
 }
@@ -3166,6 +4001,8 @@ static void register_course(void)
 
     course_count++;
 
+    save_all();
+
     printf("\nCourse registered successfully.\n");
     printf("Course ID: %s\n", course->course_id);
 }
@@ -3256,6 +4093,8 @@ static void delete_course(void)
         0,
         sizeof(courses[course_count])
     );
+
+    save_all();
 
     printf("Course deleted successfully.\n");
 }
@@ -3355,6 +4194,8 @@ static void admin_calendar_menu(void)
             calendar_state.offering=
                 !calendar_state.offering;
 
+            save_all();
+
             printf(
                 "Course offering is now %s.\n",
                 calendar_status(calendar_state.offering)
@@ -3364,6 +4205,8 @@ static void admin_calendar_menu(void)
         {
             calendar_state.unit_selection=
                 !calendar_state.unit_selection;
+
+            save_all();
 
             printf(
                 "Unit selection is now %s.\n",
@@ -3377,6 +4220,8 @@ static void admin_calendar_menu(void)
             calendar_state.classes_exams=
                 !calendar_state.classes_exams;
 
+            save_all();
+
             printf(
                 "Classes and exams are now %s.\n",
                 calendar_status(
@@ -3389,6 +4234,8 @@ static void admin_calendar_menu(void)
             calendar_state.grade_recording=
                 !calendar_state.grade_recording;
 
+            save_all();
+
             printf(
                 "Grade recording is now %s.\n",
                 calendar_status(
@@ -3400,6 +4247,8 @@ static void admin_calendar_menu(void)
         {
             calendar_state.course_survey=
                 !calendar_state.course_survey;
+
+            save_all();
 
             printf(
                 "Course survey is now %s.\n",
@@ -3588,7 +4437,23 @@ int main(void)
 {
     int option;
 
-    initialize_sample_data();
+     if (load_all())
+    {
+        printf("Data loaded successfully from %s.\n",DATA_FILE);
+    }
+    else
+    {
+        printf("No valid data file was found. "
+	"Creating sample data.\n");
+
+        initialize_sample_data();
+
+        if (!save_all())
+        {
+            printf("Warning: sample data could not be saved.\n");
+        }
+    }
+
     show_data_summary();
 
     while (1)
@@ -3614,6 +4479,7 @@ int main(void)
         }
         else if (option==5)
         {
+	    save_all();
             printf("Goodbye.\n");
             break;
         }
