@@ -116,6 +116,21 @@ static int offering_count = 0;
 static int request_count = 0;
 static int next_request_id = 1;
 
+static int strings_equal_ignore_case(
+    const char *first,
+    const char *second
+);
+
+static int verify_security_answers(
+    const char *expected_birth,
+    const char *expected_book,
+    const char *expected_bike
+);
+
+static void recover_student_password(void);
+static void recover_faculty_password(void);
+static void forgot_password_menu(void);
+
 static void copy_str(char *destination, const char *source, size_t size);
 
 static int find_student_index(const char *student_id);
@@ -242,6 +257,203 @@ static void copy_str(char *destination,const char *source,size_t size)
         index++;
     }
     destination[index]='\0';
+}
+
+static int strings_equal_ignore_case(
+    const char *first,
+    const char *second
+)
+{
+    size_t index=0;
+
+    if (first==NULL || second==NULL)
+    {
+        return 0;
+    }
+
+    while (first[index]!='\0' &&
+           second[index]!='\0')
+    {
+        if (tolower((unsigned char)first[index])!=tolower((unsigned char)second[index]))
+        {
+            return 0;
+        }
+        index++;
+    }
+    return first[index]=='\0' && second[index]=='\0';
+}
+
+static int verify_security_answers(
+    const char *expected_birth,
+    const char *expected_book,
+    const char *expected_bike)
+{
+    char birth[STR_SIZE];
+    char book[STR_SIZE];
+    char bike[STR_SIZE];
+
+    if (expected_birth[0]=='\0' ||
+        expected_book[0]=='\0' ||
+        expected_bike[0]=='\0')
+    {
+        printf(
+            "Security answers have not been configured "
+            "for this account.\n");
+
+        return 0;
+    }
+
+    read_line("Where were you born? ", birth, sizeof(birth));
+
+    read_line("What was the first book you read? ", book,sizeof(book));
+
+    read_line("What was the color of your first bicycle? ", bike,sizeof(bike));
+
+    if (!strings_equal_ignore_case(birth,expected_birth) ||
+        !strings_equal_ignore_case(book,expected_book) ||
+        !strings_equal_ignore_case(bike,expected_bike))
+    {
+        printf("One or more security answers are incorrect.\n");
+        return 0;
+    }
+    return 1;
+}
+
+static void recover_student_password(void)
+{
+    Student *student;
+    char student_id[SMALL_SIZE];
+    char new_password[STR_SIZE];
+    char confirmation[STR_SIZE];
+    int student_index;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Student Password Recovery\n");
+    printf("----------------------------------------\n");
+
+    read_line("Enter student ID: ",student_id,sizeof(student_id));
+
+    student_index=find_student_index(student_id);
+
+    if (student_index==-1)
+    {
+        printf("Student ID not found.\n");
+        return;
+    }
+
+    student=&students[student_index];
+
+    if (!verify_security_answers(student->answer_birth, student->answer_book, student->answer_bike))
+    {
+        return;
+    }
+
+    read_line("Enter new password: ",new_password,sizeof(new_password));
+
+    if (new_password[0]=='\0')
+    {
+        printf("Password cannot be empty.\n");
+        return;
+    }
+
+    read_line("Confirm new password: ",confirmation,sizeof(confirmation));
+
+    if (strcmp(new_password, confirmation)!=0)
+    {
+        printf("Passwords do not match.\n");
+        return;
+    }
+
+    copy_str(student->password,new_password,sizeof(student->password));
+
+    printf("Student password changed successfully.\n");
+}
+
+static void recover_faculty_password(void)
+{
+    Faculty *faculty;
+    char faculty_id[SMALL_SIZE];
+    char new_password[STR_SIZE];
+    char confirmation[STR_SIZE];
+    int faculty_index;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Faculty Password Recovery\n");
+    printf("----------------------------------------\n");
+
+    read_line("Enter faculty ID: ",faculty_id,sizeof(faculty_id));
+
+    faculty_index=find_faculty_index(faculty_id);
+
+    if (faculty_index==-1)
+    {
+        printf("Faculty ID not found.\n");
+        return;
+    }
+
+    faculty=&faculty_members[faculty_index];
+
+    if (!verify_security_answers(faculty->answer_birth,faculty->answer_book,faculty->answer_bike))
+    {
+        return;
+    }
+
+    read_line("Enter new password: ",new_password,sizeof(new_password));
+
+    if (new_password[0]=='\0')
+    {
+        printf("Password cannot be empty.\n");
+        return;
+    }
+
+    read_line("Confirm new password: ",confirmation,sizeof(confirmation));
+
+    if (strcmp(new_password, confirmation)!=0)
+    {
+        printf("Passwords do not match.\n");
+        return;
+    }
+
+    copy_str(faculty->password,new_password,sizeof(faculty->password));
+
+    printf("Faculty password changed successfully.\n");
+}
+
+static void forgot_password_menu(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Password Recovery\n");
+        printf("----------------------------------------\n");
+        printf("1. Recover student password\n");
+        printf("2. Recover faculty password\n");
+        printf("3. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            recover_student_password();
+        }
+        else if (option==2)
+        {
+            recover_faculty_password();
+        }
+        else if (option==3)
+        {
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
 }
 
 static int find_student_index(const char *student_id)
@@ -512,6 +724,12 @@ static void initialize_sample_data(void)
 
         copy_str(student->password,"123456",sizeof(student->password));
 
+	copy_str(student->answer_birth,"Tehran",sizeof(student->answer_birth));
+
+	copy_str(student->answer_book,"Shahnameh",sizeof(student->answer_book));
+
+	copy_str(student->answer_bike,"Blue",sizeof(student->answer_bike));
+
         student->entrance_year=1404;
         student_count++;
     }
@@ -533,6 +751,12 @@ static void initialize_sample_data(void)
         copy_str(faculty->degree,"PhD",sizeof(faculty->degree));
 
         copy_str(faculty->password,"123456",sizeof(faculty->password));
+
+	copy_str(faculty->answer_birth,"Shiraz",sizeof(faculty->answer_birth));
+
+	copy_str(faculty->answer_book,"Golestan",sizeof(faculty->answer_book));
+
+	copy_str(faculty->answer_bike,"Red",sizeof(faculty->answer_bike));
 
         faculty_count++;
     }
@@ -3386,7 +3610,7 @@ int main(void)
         }
         else if (option==4)
         {
-            printf("Forgot password will be added later.\n");
+            forgot_password_menu();
         }
         else if (option==5)
         {
