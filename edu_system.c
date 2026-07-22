@@ -17,6 +17,8 @@
 #define LINE_SIZE 8192
 #define DATA_FILE "edu_data.json"
 #define DATA_TEMP_FILE "edu_data.json.tmp"
+#define COURSE_AVAILABILITY_NEXT_SEMESTER -1
+#define COURSE_AVAILABILITY_UNRESTRICTED 0
 
 typedef struct
 {
@@ -67,6 +69,7 @@ typedef struct
     char section[SMALL_SIZE];
     char field[STR_SIZE];
     char department[STR_SIZE];
+    int available_from_semester;
 } Course;
 
 typedef struct
@@ -240,6 +243,10 @@ static void admin_calendar_menu(void);
 
 static void student_course_survey(int student_index);
 
+static int course_is_available_for_semester(
+    const Course *course,
+    int semester
+);
 static int course_is_in_use(const char *course_id);
 static int faculty_is_in_use(const char *faculty_id);
 
@@ -879,6 +886,31 @@ static int prerequisites_satisfied(
     return 1;
 }
 
+static int course_is_available_for_semester(
+    const Course *course,
+    int semester
+)
+{
+    if (course==NULL || semester<=0)
+    {
+        return 0;
+    }
+
+    if (course->available_from_semester==
+        COURSE_AVAILABILITY_NEXT_SEMESTER)
+    {
+        return 0;
+    }
+
+    if (course->available_from_semester==
+        COURSE_AVAILABILITY_UNRESTRICTED)
+    {
+        return 1;
+    }
+
+    return semester>=course->available_from_semester;
+}
+
 static int course_is_in_use(const char *course_id)
 {
     int index;
@@ -1082,7 +1114,7 @@ static int save_all(void)
 
         json_write_key_string(file,"answer_bike",student->answer_bike);
         
-	fputc(',', file);
+	    fputc(',', file);
 
         json_write_key_string(file,"password",student->password);
 
@@ -1172,6 +1204,8 @@ static int save_all(void)
         fputc(',', file);
 
         json_write_key_string(file,"department",course->department);
+
+        fprintf(file,",\"available_from_semester\":%d",course->available_from_semester);
 
         fputc('}', file);
     }
@@ -1640,20 +1674,68 @@ static int load_all(void)
                 invalid_lines++;
             }
         }
-        else if (strcmp(record_type, "course")==0 &&
-            course_count<MAX_COURSES)
+
+        else if (strcmp(record_type, "course")==0 && course_count<MAX_COURSES)
         {
             Course course;
+            int course_fields_loaded;
 
             memset(&course, 0, sizeof(course));
 
-            if (next_json_string(&cursor,course.name,sizeof(course.name)) &&
-                next_json_string(&cursor,course.course_id,sizeof(course.course_id)) &&
-                next_json_int(&cursor,&course.units) &&
-                next_json_string(&cursor,course.prerequisites,sizeof(course.prerequisites)) &&
-                next_json_string(&cursor, course.section,sizeof(course.section)) &&
-                next_json_string(&cursor,course.field,sizeof(course.field)) &&
-                next_json_string(&cursor,course.department,sizeof(course.department)))
+            course.available_from_semester=
+                COURSE_AVAILABILITY_UNRESTRICTED;
+
+            course_fields_loaded=
+                next_json_string(
+                    &cursor,
+                    course.name,
+                    sizeof(course.name)
+                ) &&
+                next_json_string(
+                    &cursor,
+                    course.course_id,
+                    sizeof(course.course_id)
+                ) &&
+                next_json_int(
+                    &cursor,
+                    &course.units
+                ) &&
+                next_json_string(
+                    &cursor,
+                    course.prerequisites,
+                    sizeof(course.prerequisites)
+                ) &&
+                next_json_string(
+                    &cursor,
+                    course.section,
+                    sizeof(course.section)
+                ) &&
+                next_json_string(
+                    &cursor,
+                    course.field,
+                    sizeof(course.field)
+                ) &&
+                next_json_string(
+                    &cursor,
+                    course.department,
+                    sizeof(course.department)
+                );
+
+            if (course_fields_loaded &&
+                strstr(
+                    line,
+                    "\"available_from_semester\""
+                )!=NULL)
+            {
+                course_fields_loaded=next_json_int(
+                    &cursor,
+                    &course.available_from_semester
+                );
+            }
+
+            if (course_fields_loaded &&
+                course.available_from_semester>=
+                    COURSE_AVAILABILITY_NEXT_SEMESTER)
             {
                 courses[course_count]=course;
                 course_count++;
@@ -1664,6 +1746,7 @@ static int load_all(void)
                 invalid_lines++;
             }
         }
+
         else if (strcmp(record_type, "offering")==0 && offering_count<MAX_OFFERINGS)
         {
             Offering offering;
@@ -2045,6 +2128,9 @@ static void add_course_seed(
         department,
         sizeof(course->department)
     );
+
+    course->available_from_semester=
+    COURSE_AVAILABILITY_UNRESTRICTED;
 
     course_count++;
 }
@@ -3480,6 +3566,30 @@ static void faculty_offer_course_request(
 
     course=&courses[course_index];
 
+    if (!course_is_available_for_semester(
+        course,
+        calendar_state.current_semester))
+    {
+        if (course->available_from_semester==
+            COURSE_AVAILABILITY_NEXT_SEMESTER)
+        {
+            printf(
+                "This course was registered after course "
+                "offering started and can be offered from "
+                "the next semester.\n"
+            );
+        }
+        else
+        {
+            printf(
+                "This course is available from semester %d.\n",
+                course->available_from_semester
+            );
+        }
+
+        return;
+    }
+
     capacity=read_int("Enter capacity: ");
 
     if (capacity<=0)
@@ -3948,6 +4058,7 @@ static void list_requests(void)
 static void approve_request(void)
 {
     Request *request;
+    Course *course;
     Offering *offering;
     int request_id;
     int request_index;
@@ -4008,6 +4119,20 @@ static void approve_request(void)
         {
             printf(
                 "The requested course no longer exists.\n"
+            );
+            return;
+        }
+
+        course=&courses[course_index];
+
+        if (!course_is_available_for_semester(
+                course,
+                request->semester))
+        {
+            printf(
+                "This course is not available for offering "
+                "in semester %d.\n",
+                request->semester
             );
             return;
         }
@@ -7493,10 +7618,25 @@ static void register_course(void)
     );
 
     read_line(
-        "Department: ",
-        course->department,
-        sizeof(course->department)
-    );
+    "Department: ",
+    course->department,
+    sizeof(course->department)
+);
+
+    /*
+     * A course registered before course offering starts
+     * may be offered in the current semester.
+     */
+    if (calendar_state.offering==PHASE_NOT_STARTED)
+    {
+        course->available_from_semester=
+            calendar_state.current_semester;
+    }
+    else
+    {
+        course->available_from_semester=
+            COURSE_AVAILABILITY_NEXT_SEMESTER;
+    }
 
     course_count++;
 
@@ -7504,6 +7644,22 @@ static void register_course(void)
 
     printf("\nCourse registered successfully.\n");
     printf("Course ID: %s\n", course->course_id);
+
+    if (course->available_from_semester==
+        COURSE_AVAILABILITY_NEXT_SEMESTER)
+    {
+        printf(
+            "This course can be offered starting from "
+            "the next semester.\n"
+        );
+    }
+    else
+    {
+        printf(
+            "Available from semester: %d\n",
+            course->available_from_semester
+        );
+    }
 }
 
 static void delete_course(void)
@@ -7748,6 +7904,16 @@ static void start_next_semester(void)
 
     previous_semester=
     calendar_state.current_semester;
+
+    for (index=0; index<course_count; index++)
+    {
+        if (courses[index].available_from_semester==
+            COURSE_AVAILABILITY_NEXT_SEMESTER)
+        {
+            courses[index].available_from_semester=
+                next_semester;
+        }
+    }
 
     for (index=0; index<request_count; index++)
     {
