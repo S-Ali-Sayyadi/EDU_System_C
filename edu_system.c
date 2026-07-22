@@ -39,6 +39,7 @@ typedef struct
     char mentor[STR_SIZE];
     char department[STR_SIZE];
     char answer_birth[STR_SIZE];
+    char answer_school[STR_SIZE];
     char answer_book[STR_SIZE];
     char answer_bike[STR_SIZE];
     char password[STR_SIZE];
@@ -56,6 +57,7 @@ typedef struct
     char department[STR_SIZE];
     char password[STR_SIZE];
     char answer_birth[STR_SIZE];
+    char answer_school[STR_SIZE];
     char answer_book[STR_SIZE];
     char answer_bike[STR_SIZE];
 } Faculty;
@@ -158,8 +160,16 @@ static int contains_ignore_case(
 
 static int verify_security_answers(
     const char *expected_birth,
+    const char *expected_school,
     const char *expected_book,
     const char *expected_bike
+);
+
+static int ask_retry_or_back(const char *back_label);
+
+static int read_new_password(
+    char *output,
+    size_t size
 );
 
 static void recover_student_password(void);
@@ -261,6 +271,7 @@ static void add_student_seed(
     const char *mentor,
     const char *department,
     const char *answer_birth,
+    const char *answer_school,
     const char *answer_book,
     const char *answer_bike,
     const char *password
@@ -513,38 +524,164 @@ static int contains_ignore_case(
 
 static int verify_security_answers(
     const char *expected_birth,
+    const char *expected_school,
     const char *expected_book,
-    const char *expected_bike)
+    const char *expected_bike
+)
 {
     char birth[STR_SIZE];
+    char school[STR_SIZE];
     char book[STR_SIZE];
     char bike[STR_SIZE];
 
     if (expected_birth[0]=='\0' ||
+        expected_school[0]=='\0' ||
         expected_book[0]=='\0' ||
         expected_bike[0]=='\0')
     {
         printf(
             "Security answers have not been configured "
-            "for this account.\n");
+            "for this account.\n"
+        );
 
         return 0;
     }
 
-    read_line("Where were you born? ", birth, sizeof(birth));
+    read_line(
+        "Where were you born? ",
+        birth,
+        sizeof(birth)
+    );
 
-    read_line("What was the first book you read? ", book,sizeof(book));
+    read_line(
+        "What was the name of your first school? ",
+        school,
+        sizeof(school)
+    );
 
-    read_line("What was the color of your first bicycle? ", bike,sizeof(bike));
+    read_line(
+        "What was the title of the first book you read? ",
+        book,
+        sizeof(book)
+    );
 
-    if (!strings_equal_ignore_case(birth,expected_birth) ||
-        !strings_equal_ignore_case(book,expected_book) ||
-        !strings_equal_ignore_case(bike,expected_bike))
+    read_line(
+        "What was the color of your first bicycle? ",
+        bike,
+        sizeof(bike)
+    );
+
+    if (!strings_equal_ignore_case(
+            birth,
+            expected_birth
+        ) ||
+        !strings_equal_ignore_case(
+            school,
+            expected_school
+        ) ||
+        !strings_equal_ignore_case(
+            book,
+            expected_book
+        ) ||
+        !strings_equal_ignore_case(
+            bike,
+            expected_bike
+        ))
     {
-        printf("One or more security answers are incorrect.\n");
+        printf(
+            "One or more security answers are incorrect.\n"
+        );
+
         return 0;
     }
+
     return 1;
+}
+
+static int ask_retry_or_back(const char *back_label)
+{
+    int option;
+
+    while (1)
+    {
+        printf("1. Retry\n");
+        printf("2. %s\n", back_label);
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            return 1;
+        }
+
+        if (option==2)
+        {
+            return 0;
+        }
+
+        printf(
+            "Invalid option. Please try again.\n"
+        );
+    }
+}
+
+static int read_new_password(
+    char *output,
+    size_t size
+)
+{
+    char new_password[STR_SIZE];
+    char confirmation[STR_SIZE];
+
+    while (1)
+    {
+        read_line(
+            "Enter your new password: ",
+            new_password,
+            sizeof(new_password)
+        );
+
+        if (new_password[0]=='\0')
+        {
+            printf("Password cannot be empty.\n");
+
+            if (!ask_retry_or_back("Cancel"))
+            {
+                return 0;
+            }
+
+            continue;
+        }
+
+        read_line(
+            "Confirm your password: ",
+            confirmation,
+            sizeof(confirmation)
+        );
+
+        if (strcmp(
+                new_password,
+                confirmation
+            )!=0)
+        {
+            printf("Passwords do not match.\n");
+
+            if (!ask_retry_or_back("Cancel"))
+            {
+                return 0;
+            }
+
+            continue;
+        }
+
+        copy_str(
+            output,
+            new_password,
+            size
+        );
+
+        return 1;
+    }
 }
 
 static void recover_student_password(void)
@@ -552,7 +689,6 @@ static void recover_student_password(void)
     Student *student;
     char student_id[SMALL_SIZE];
     char new_password[STR_SIZE];
-    char confirmation[STR_SIZE];
     int student_index;
 
     printf("\n");
@@ -560,44 +696,69 @@ static void recover_student_password(void)
     printf("Student Password Recovery\n");
     printf("----------------------------------------\n");
 
-    read_line("Enter student ID: ",student_id,sizeof(student_id));
-
-    student_index=find_student_index(student_id);
-
-    if (student_index==-1)
+    while (1)
     {
-        printf("Student ID not found.\n");
+        read_line(
+            "Enter your username: ",
+            student_id,
+            sizeof(student_id)
+        );
+
+        student_index=
+            find_student_index(student_id);
+
+        if (student_index==-1)
+        {
+            printf("Username not found.\n");
+
+            if (!ask_retry_or_back(
+                    "Go back"
+                ))
+            {
+                return;
+            }
+
+            continue;
+        }
+
+        student=&students[student_index];
+        break;
+    }
+
+    while (!verify_security_answers(
+        student->answer_birth,
+        student->answer_school,
+        student->answer_book,
+        student->answer_bike
+    ))
+    {
+        if (!ask_retry_or_back(
+                "Go back"
+            ))
+        {
+            return;
+        }
+    }
+
+    printf("Authentication successful.\n");
+
+    if (!read_new_password(
+        new_password,
+        sizeof(new_password)
+    ))
+    {
         return;
     }
 
-    student=&students[student_index];
-
-    if (!verify_security_answers(student->answer_birth, student->answer_book, student->answer_bike))
-    {
-        return;
-    }
-
-    read_line("Enter new password: ",new_password,sizeof(new_password));
-
-    if (new_password[0]=='\0')
-    {
-        printf("Password cannot be empty.\n");
-        return;
-    }
-
-    read_line("Confirm new password: ",confirmation,sizeof(confirmation));
-
-    if (strcmp(new_password, confirmation)!=0)
-    {
-        printf("Passwords do not match.\n");
-        return;
-    }
-
-    copy_str(student->password,new_password,sizeof(student->password));
+    copy_str(
+        student->password,
+        new_password,
+        sizeof(student->password)
+    );
 
     save_all();
 
-    printf("Student password changed successfully.\n");
+    printf("Password changed successfully.\n");
 }
 
 static void recover_faculty_password(void)
@@ -605,7 +766,6 @@ static void recover_faculty_password(void)
     Faculty *faculty;
     char faculty_id[SMALL_SIZE];
     char new_password[STR_SIZE];
-    char confirmation[STR_SIZE];
     int faculty_index;
 
     printf("\n");
@@ -613,44 +773,69 @@ static void recover_faculty_password(void)
     printf("Faculty Password Recovery\n");
     printf("----------------------------------------\n");
 
-    read_line("Enter faculty ID: ",faculty_id,sizeof(faculty_id));
-
-    faculty_index=find_faculty_index(faculty_id);
-
-    if (faculty_index==-1)
+    while (1)
     {
-        printf("Faculty ID not found.\n");
+        read_line(
+            "Enter your username: ",
+            faculty_id,
+            sizeof(faculty_id)
+        );
+
+        faculty_index=
+            find_faculty_index(faculty_id);
+
+        if (faculty_index==-1)
+        {
+            printf("Username not found.\n");
+
+            if (!ask_retry_or_back(
+                    "Go back"
+                ))
+            {
+                return;
+            }
+
+            continue;
+        }
+
+        faculty=&faculty_members[faculty_index];
+        break;
+    }
+
+    while (!verify_security_answers(
+        faculty->answer_birth,
+        faculty->answer_school,
+        faculty->answer_book,
+        faculty->answer_bike
+    ))
+    {
+        if (!ask_retry_or_back(
+                "Go back"
+            ))
+        {
+            return;
+        }
+    }
+
+    printf("Authentication successful.\n");
+
+    if (!read_new_password(
+        new_password,
+        sizeof(new_password)
+    ))
+    {
         return;
     }
 
-    faculty=&faculty_members[faculty_index];
-
-    if (!verify_security_answers(faculty->answer_birth,faculty->answer_book,faculty->answer_bike))
-    {
-        return;
-    }
-
-    read_line("Enter new password: ",new_password,sizeof(new_password));
-
-    if (new_password[0]=='\0')
-    {
-        printf("Password cannot be empty.\n");
-        return;
-    }
-
-    read_line("Confirm new password: ",confirmation,sizeof(confirmation));
-
-    if (strcmp(new_password, confirmation)!=0)
-    {
-        printf("Passwords do not match.\n");
-        return;
-    }
-
-    copy_str(faculty->password,new_password,sizeof(faculty->password));
+    copy_str(
+        faculty->password,
+        new_password,
+        sizeof(faculty->password)
+    );
 
     save_all();
 
-    printf("Faculty password changed successfully.\n");
+    printf("Password changed successfully.\n");
 }
 
 static void forgot_password_menu(void)
@@ -1108,6 +1293,10 @@ static int save_all(void)
 
         fputc(',', file);
 
+        json_write_key_string(file,"answer_school",student->answer_school);
+
+        fputc(',', file);
+
         json_write_key_string(file,"answer_book",student->answer_book);
 
         fputc(',', file);
@@ -1163,6 +1352,10 @@ static int save_all(void)
         fputc(',', file);
 
         json_write_key_string(file,"answer_birth",faculty->answer_birth);
+
+        fputc(',', file);
+
+        json_write_key_string(file,"answer_school",faculty->answer_school);
 
         fputc(',', file);
 
@@ -1613,26 +1806,38 @@ static int load_all(void)
                 }
             }
         }
-        else if (strcmp(record_type, "student")==0 && student_count < MAX_STUDENTS)
+        else if (strcmp(record_type, "student")==0 &&student_count<MAX_STUDENTS)
         {
             Student student;
+            int student_fields_loaded;
 
-            memset(&student, 0, sizeof(student));
+            memset(&student,0,sizeof(student));
 
-            if (
+            copy_str(student.answer_school,"Unknown",sizeof(student.answer_school));
+
+            student_fields_loaded=
                 next_json_string(&cursor,student.first_name,sizeof(student.first_name)) &&
-                next_json_string(&cursor,student.last_name,sizeof(student.last_name)) &&
-                next_json_string(&cursor,student.student_id,sizeof(student.student_id)) &&
-                next_json_string(&cursor,student.national_code,sizeof(student.national_code)) &&
-                next_json_string(&cursor,student.field,sizeof(student.field)) &&
-                next_json_int(&cursor,&student.entrance_year) &&
-                next_json_string(&cursor,student.section,sizeof(student.section)) &&
-                next_json_string(&cursor,student.mentor,sizeof(student.mentor)) &&
-                next_json_string(&cursor,student.department,sizeof(student.department)) &&
-                next_json_string(&cursor,student.answer_birth,sizeof(student.answer_birth)) &&
-                next_json_string(&cursor,student.answer_book,sizeof(student.answer_book)) &&
+                    next_json_string(&cursor,student.last_name,sizeof(student.last_name)) &&
+                        next_json_string(&cursor,student.student_id,sizeof(student.student_id)) &&
+                            next_json_string(&cursor,student.national_code,sizeof(student.national_code)) &&
+                                next_json_string(&cursor,student.field,sizeof(student.field)) &&
+                                    next_json_int(&cursor,&student.entrance_year) &&
+                                        next_json_string(&cursor,student.section,sizeof(student.section)) &&
+                                            next_json_string(&cursor,student.mentor,sizeof(student.mentor)) &&
+                                                next_json_string(&cursor,student.department,sizeof(student.department)) &&
+                                                    next_json_string(&cursor,student.answer_birth,sizeof(student.answer_birth));
+
+            if (student_fields_loaded && strstr(line,"\"answer_school\"")!=NULL)
+            {
+                student_fields_loaded=
+                    next_json_string(&cursor,student.answer_school,sizeof(student.answer_school));
+            }
+
+            student_fields_loaded=student_fields_loaded &&next_json_string(&cursor,student.answer_book,sizeof(student.answer_book)) &&
                 next_json_string(&cursor,student.answer_bike,sizeof(student.answer_bike)) &&
-                next_json_string(&cursor,student.password,sizeof(student.password)))
+                    next_json_string(&cursor,student.password,sizeof(student.password));
+
+            if (student_fields_loaded)
             {
                 students[student_count]=student;
                 student_count++;
@@ -1643,38 +1848,60 @@ static int load_all(void)
                 invalid_lines++;
             }
         }
-        else if (
-            strcmp(record_type, "faculty")==0 &&
-            faculty_count < MAX_FACULTY)
+
+        else if (strcmp(record_type, "faculty")==0 &&faculty_count<MAX_FACULTY)
         {
             Faculty faculty;
+            int faculty_fields_loaded;
+            memset(&faculty,0,sizeof(faculty));
 
-            memset(&faculty, 0, sizeof(faculty));
+            copy_str(faculty.answer_school,"Unknown",sizeof(faculty.answer_school));
 
-            if (next_json_string(&cursor,faculty.first_name,sizeof(faculty.first_name)) &&
+            faculty_fields_loaded=next_json_string(&cursor,faculty.first_name,sizeof(faculty.first_name)) &&
                 next_json_string(&cursor,faculty.last_name,sizeof(faculty.last_name)) &&
-                next_json_string(&cursor,faculty.faculty_id,sizeof(faculty.faculty_id)) &&
-                next_json_string(&cursor,faculty.national_code,sizeof(faculty.national_code)) &&
-                next_json_string(&cursor,faculty.field,sizeof(faculty.field)) &&
-                next_json_int(&cursor,&faculty.entrance_year) &&
-                next_json_string(&cursor,faculty.degree,sizeof(faculty.degree)) &&
-                next_json_string(&cursor,faculty.department,sizeof(faculty.department)) &&
-                next_json_string(&cursor,faculty.password,sizeof(faculty.password)) &&
-                next_json_string(&cursor,faculty.answer_birth,sizeof(faculty.answer_birth)) &&
-                next_json_string(&cursor,faculty.answer_book,sizeof(faculty.answer_book)) &&
-                next_json_string(&cursor,faculty.answer_bike,sizeof(faculty.answer_bike)))
-            
+                    next_json_string(&cursor,faculty.faculty_id,sizeof(faculty.faculty_id)) &&
+                        next_json_string(&cursor,faculty.national_code,sizeof(faculty.national_code)) &&
+                            next_json_string(&cursor,faculty.field,sizeof(faculty.field)) &&
+                                next_json_int(&cursor,&faculty.entrance_year) &&
+                                    next_json_string(&cursor,faculty.degree,sizeof(faculty.degree)) &&
+                                        next_json_string(&cursor,faculty.department,sizeof(faculty.department)) &&
+                                            next_json_string(&cursor,faculty.password,sizeof(faculty.password)) &&
+                                                next_json_string(&cursor,faculty.answer_birth,sizeof(faculty.answer_birth));
+
+            if (faculty_fields_loaded &&
+            strstr(line,"\"answer_school\"")!=NULL)
             {
-                faculty_members[faculty_count]=faculty;
+                faculty_fields_loaded=next_json_string(
+                &cursor,
+                faculty.answer_school,
+                sizeof(faculty.answer_school)
+                );
+            }
+
+            faculty_fields_loaded=
+                faculty_fields_loaded &&
+                    next_json_string(
+                        &cursor,
+                        faculty.answer_book,
+                        sizeof(faculty.answer_book)
+                        ) &&
+                            next_json_string(
+                                &cursor,
+                                faculty.answer_bike,
+                                sizeof(faculty.answer_bike));
+
+            if (faculty_fields_loaded)
+            {
+                faculty_members[faculty_count]=
+                    faculty;
                 faculty_count++;
                 loaded_any=1;
             }
             else
-            {
+                {
                 invalid_lines++;
-            }
-        }
-
+                }
+}
         else if (strcmp(record_type, "course")==0 && course_count<MAX_COURSES)
         {
             Course course;
@@ -1871,6 +2098,7 @@ static void add_student_seed(
     const char *mentor,
     const char *department,
     const char *answer_birth,
+    const char *answer_school,
     const char *answer_book,
     const char *answer_bike,
     const char *password
@@ -1946,6 +2174,11 @@ static void add_student_seed(
         answer_birth,
         sizeof(student->answer_birth)
     );
+
+    copy_str(
+    student->answer_school,
+    answer_school,
+    sizeof(student->answer_school));
 
     copy_str(
         student->answer_book,
@@ -2050,6 +2283,11 @@ static void add_faculty_seed(
         "Tehran",
         sizeof(faculty->answer_birth)
     );
+
+    copy_str(
+    faculty->answer_school,
+    "Sharif High School",
+    sizeof(faculty->answer_school));
 
     copy_str(
         faculty->answer_book,
@@ -2287,6 +2525,7 @@ static void initialize_sample_data(void)
         "Hossein Asadi",
         "Computer Engineering",
         "Karaj",
+        "Alborz High School",
         "Anne Shirley",
         "White",
         "123456"
@@ -2303,6 +2542,7 @@ static void initialize_sample_data(void)
         "Mehdi Rezaei",
         "Electrical Engineering",
         "Isfahan",
+        "Beheshti High School",
         "The Little Prince",
         "Blue",
         "123456"
@@ -2319,6 +2559,7 @@ static void initialize_sample_data(void)
         "Leila Ahmadi",
         "Mechanical Engineering",
         "Shiraz",
+        "Hafez High School",
         "Pride and Prejudice",
         "Red",
         "123456"
@@ -2335,6 +2576,7 @@ static void initialize_sample_data(void)
         "Saeed Jamali",
         "Civil Engineering",
         "Sanandaj",
+        "Kurdistan High School",
         "The Alchemist",
         "Green",
         "123456"
@@ -2351,6 +2593,7 @@ static void initialize_sample_data(void)
         "Parisa Moradi",
         "Computer Engineering",
         "Kermanshah",
+        "Razi High School",
         "1984",
         "Black",
         "123456"
@@ -3628,7 +3871,7 @@ static void faculty_offer_course_request(
     {
         if (strcmp(offerings[index].course_id,course_id)==0 &&
             strcmp(offerings[index].faculty_id,faculty->faculty_id)==0 &&
-            requests[index].semester==calendar_state.current_semester)
+            offerings[index].semester==calendar_state.current_semester)
         {
             printf("This course offering already exists.\n");return;
         }
@@ -6388,7 +6631,13 @@ static void register_student(void)
     );
 
     read_line(
-        "What was the first book you read? ",
+    "What was the name of your first school? ",
+    student->answer_school,
+    sizeof(student->answer_school)
+    );
+
+    read_line(
+        "What was the title of the first book you read? ",
         student->answer_book,
         sizeof(student->answer_book)
     );
@@ -6436,7 +6685,7 @@ static void import_students_file(void)
     )
     {
         Student student;
-        char *fields[13];
+        char *fields[14];
         char extra[2];
         int field_count;
         int entrance_year;
@@ -6452,13 +6701,9 @@ static void import_students_file(void)
         field_count=parse_csv_line(
             line,
             fields,
-            13
+            14
         );
 
-        /*
-         * Remove an optional UTF-8 BOM added by
-         * programs such as Microsoft Excel.
-         */
         if (
             field_count>0 &&
             (unsigned char)fields[0][0]==0xEF &&
@@ -6473,9 +6718,6 @@ static void import_students_file(void)
             );
         }
 
-        /*
-         * The CSV header is optional.
-         */
         if (
             field_count>=3 &&
             strings_equal_ignore_case(
@@ -6495,11 +6737,7 @@ static void import_students_file(void)
             continue;
         }
 
-        /*
-         * Twelve fields are required.
-         * Password, field 13, is optional.
-         */
-        if (field_count<12 || field_count>13)
+        if (field_count<13 || field_count>14)
         {
             invalid_count++;
             continue;
@@ -6518,6 +6756,7 @@ static void import_students_file(void)
             fields[9][0]=='\0' ||
             fields[10][0]=='\0' ||
             fields[11][0]=='\0' ||
+            fields[12][0]=='\0' ||
             sscanf(
                 fields[5],
                 "%d %1s",
@@ -6599,25 +6838,31 @@ static void import_students_file(void)
         );
 
         copy_str(
-            student.answer_book,
+            student.answer_school,
             fields[10],
+            sizeof(student.answer_school)
+        );
+
+        copy_str(
+            student.answer_book,
+            fields[11],
             sizeof(student.answer_book)
         );
 
         copy_str(
             student.answer_bike,
-            fields[11],
+            fields[12],
             sizeof(student.answer_bike)
         );
 
         if (
-            field_count==13 &&
-            fields[12][0]!='\0'
+            field_count==14 &&
+            fields[13][0]!='\0'
         )
         {
             copy_str(
                 student.password,
-                fields[12],
+                fields[13],
                 sizeof(student.password)
             );
         }
@@ -6732,9 +6977,6 @@ static void delete_student(void)
         return;
     }
 
-    /*
-     * Remove the student from every course offering.
-     */
     for (
         offering_index=0;
         offering_index<offering_count;
@@ -6779,9 +7021,6 @@ static void delete_student(void)
         );
     }
 
-    /*
-     * Remove the student record.
-     */
     for (
         index=student_index;
         index<student_count-1;
@@ -7020,7 +7259,13 @@ static void register_faculty(void)
     );
 
     read_line(
-        "What was the first book you read? ",
+    "What was the name of your first school? ",
+    faculty->answer_school,
+    sizeof(faculty->answer_school)
+    );
+
+    read_line(
+         "What was the title of the first book you read? ",
         faculty->answer_book,
         sizeof(faculty->answer_book)
     );
@@ -7068,7 +7313,7 @@ static void import_faculty_file(void)
     )
     {
         Faculty faculty;
-        char *fields[12];
+        char *fields[13];
         char extra[2];
         int field_count;
         int entrance_year;
@@ -7084,12 +7329,9 @@ static void import_faculty_file(void)
         field_count=parse_csv_line(
             line,
             fields,
-            12
+            13
         );
 
-        /*
-         * Remove an optional UTF-8 BOM.
-         */
         if (
             field_count>0 &&
             (unsigned char)fields[0][0]==0xEF &&
@@ -7104,9 +7346,6 @@ static void import_faculty_file(void)
             );
         }
 
-        /*
-         * The CSV header is optional.
-         */
         if (
             field_count>=3 &&
             strings_equal_ignore_case(
@@ -7126,11 +7365,7 @@ static void import_faculty_file(void)
             continue;
         }
 
-        /*
-         * The first eight fields are required.
-         * The remaining four fields are optional.
-         */
-        if (field_count<8 || field_count>12)
+        if (field_count<8 || field_count>13)
         {
             invalid_count++;
             continue;
@@ -7254,13 +7489,33 @@ static void import_faculty_file(void)
         }
 
         if (
-            field_count>=11 &&
-            fields[10][0]!='\0'
+        field_count>=11 &&
+        fields[10][0]!='\0'
+        )
+        {
+            copy_str(
+                faculty.answer_school,
+                fields[10],
+                sizeof(faculty.answer_school)
+            );
+        }
+        else
+        {
+            copy_str(
+                faculty.answer_school,
+                "Sharif High School",
+                sizeof(faculty.answer_school)
+            );
+        }
+
+        if (
+            field_count>=12 &&
+            fields[11][0]!='\0'
         )
         {
             copy_str(
                 faculty.answer_book,
-                fields[10],
+                fields[11],
                 sizeof(faculty.answer_book)
             );
         }
@@ -7274,13 +7529,13 @@ static void import_faculty_file(void)
         }
 
         if (
-            field_count>=12 &&
-            fields[11][0]!='\0'
+            field_count>=13 &&
+            fields[12][0]!='\0'
         )
         {
             copy_str(
                 faculty.answer_bike,
-                fields[11],
+                fields[12],
                 sizeof(faculty.answer_bike)
             );
         }
@@ -7623,10 +7878,6 @@ static void register_course(void)
     sizeof(course->department)
 );
 
-    /*
-     * A course registered before course offering starts
-     * may be offered in the current semester.
-     */
     if (calendar_state.offering==PHASE_NOT_STARTED)
     {
         course->available_from_semester=
