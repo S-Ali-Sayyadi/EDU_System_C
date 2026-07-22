@@ -333,8 +333,15 @@ static int prerequisites_satisfied(
     const Course *course
 );
 
-static void student_enroll_course(int student_index);
-static void student_withdraw_course(int student_index);
+static void student_enroll_course(
+    int student_index,
+    int selected_semester
+);
+
+static void student_withdraw_course(
+    int student_index,
+    int selected_semester
+);
 static void student_offerings_menu(int student_index);
 
 static void login_student(void);
@@ -3438,7 +3445,6 @@ static void faculty_offer_course_request(
     char place[STR_SIZE];
     int course_index;
     int capacity;
-    int semester;
     int index;
 
     faculty=&faculty_members[faculty_index];
@@ -3488,14 +3494,6 @@ static void faculty_offer_course_request(
         return;
     }
 
-    semester=read_int("Enter semester number: ");
-
-    if (semester<=0)
-    {
-        printf("Semester number must be greater than zero.\n");
-        return;
-    }
-
     read_line("Enter class place: ",place,sizeof(place));
 
     if (place[0]=='\0')
@@ -3508,7 +3506,7 @@ static void faculty_offer_course_request(
         if (strcmp(requests[index].type,"offer")==0 &&
             strcmp(requests[index].course_id,course_id)==0 &&
             strcmp(requests[index].faculty_id,faculty->faculty_id)==0 &&
-            requests[index].semester == semester &&
+            requests[index].semester==calendar_state.current_semester &&
             strcmp(requests[index].status,"pending")==0)
         {
             printf("A pending request for this offering ""already exists.\n");
@@ -3520,7 +3518,7 @@ static void faculty_offer_course_request(
     {
         if (strcmp(offerings[index].course_id,course_id)==0 &&
             strcmp(offerings[index].faculty_id,faculty->faculty_id)==0 &&
-            offerings[index].semester==semester)
+            requests[index].semester==calendar_state.current_semester)
         {
             printf("This course offering already exists.\n");return;
         }
@@ -3550,7 +3548,8 @@ static void faculty_offer_course_request(
         sizeof(request->faculty_id)
     );
 
-    request->semester=semester;
+    request->semester=
+    calendar_state.current_semester;
     request->capacity=capacity;
     request->amount=0;
     request->offering_index = -1;
@@ -3579,6 +3578,7 @@ static void faculty_offer_course_request(
 
     printf("\nRequest sent successfully.\n");
     printf("Request ID: %d\n", request->id);
+    printf("Semester: %d\n", request->semester);
     printf("Status: %s\n", request->status);
 }
 
@@ -3624,6 +3624,17 @@ static void faculty_request_capacity(
     if (strcmp(offering->faculty_id, faculty->faculty_id)!=0)
     {
         printf("This offering does not belong to you.\n");
+        return;
+    }
+
+    if (offering->semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "Capacity can be changed only for offerings "
+            "in the current semester (%d).\n",
+            calendar_state.current_semester
+        );
         return;
     }
 
@@ -3742,6 +3753,17 @@ static void faculty_request_removal(
     if (strcmp(offering->faculty_id, faculty->faculty_id)!=0)
     {
         printf("This offering does not belong to you.\n");
+        return;
+    }
+
+    if (offering->semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "Only an offering from the current semester "
+            "(%d) can be removed.\n",
+            calendar_state.current_semester
+        );
         return;
     }
 
@@ -3956,6 +3978,18 @@ static void approve_request(void)
     {
         printf(
             "This request has already been processed.\n"
+        );
+        return;
+    }
+
+    if (request->semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "This request belongs to semester %d and "
+            "cannot be approved in semester %d.\n",
+            request->semester,
+            calendar_state.current_semester
         );
         return;
     }
@@ -4301,7 +4335,7 @@ static void admin_requests_menu(void)
     }
 }
 
-static void student_enroll_course(int student_index)
+static void student_enroll_course(int student_index,int selected_semester)
 {
     Student *student;
     Course *course;
@@ -4312,6 +4346,17 @@ static void student_enroll_course(int student_index)
     int course_index;
 
     student=&students[student_index];
+
+    if (selected_semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "Enrollment is available only for the current "
+            "semester (%d).\n",
+            calendar_state.current_semester
+        );
+        return;
+    }
 
     if (calendar_state.unit_selection!=PHASE_ACTIVE)
         {
@@ -4338,6 +4383,17 @@ static void student_enroll_course(int student_index)
     }
 
     offering=&offerings[offering_index];
+
+    if (offering->semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "The selected offering is not in the current "
+            "semester (%d).\n",
+            calendar_state.current_semester
+        );
+        return;
+    }
 
     course_index=
         find_course_index(offering->course_id);
@@ -4418,7 +4474,7 @@ static void student_enroll_course(int student_index)
     );
 }
 
-static void student_withdraw_course(int student_index)
+static void student_withdraw_course(int student_index,int selected_semester)
 {
     Student *student;
     Offering *offering;
@@ -4428,6 +4484,17 @@ static void student_withdraw_course(int student_index)
     int index;
 
     student=&students[student_index];
+
+    if (selected_semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "Withdrawal is available only for the current "
+            "semester (%d).\n",
+            calendar_state.current_semester
+        );
+        return;
+    }
 
     if (calendar_state.unit_selection!=PHASE_ACTIVE)
         {
@@ -4457,6 +4524,17 @@ static void student_withdraw_course(int student_index)
     }
 
     offering=&offerings[offering_index];
+
+    if (offering->semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "The selected offering is not in the current "
+            "semester (%d).\n",
+            calendar_state.current_semester
+        );
+        return;
+    }
 
     enrollment_index=offering_has_student(
         offering_index,
@@ -4550,11 +4628,11 @@ static void student_offerings_menu(int student_index)
             }
             else if (option==2)
             {
-                student_enroll_course(student_index);
+                student_enroll_course(student_index,semester);
             }
             else if (option==3)
             {
-                student_withdraw_course(student_index);
+                student_withdraw_course(student_index,semester);
             }
             else if (option==4)
             {
@@ -4593,16 +4671,7 @@ static void student_course_survey(int student_index)
     printf("Student: Course Survey\n");
     printf("----------------------------------------\n");
 
-    semester=
-        read_int("Enter semester number: ");
-
-    if (semester<=0)
-    {
-        printf(
-            "Semester number must be greater than zero.\n"
-        );
-        return;
-    }
+    semester=calendar_state.current_semester;
 
     printf(
         "\nGraded courses available for survey "
@@ -4947,6 +5016,17 @@ static void faculty_record_grade_for_offering(
     faculty=&faculty_members[faculty_index];
     offering=&offerings[offering_index];
 
+    if (offering->semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "Grades can be recorded only for the current "
+            "semester (%d).\n",
+            calendar_state.current_semester
+        );
+        return;
+    }
+
     if (strcmp(
             offering->faculty_id,
             faculty->faculty_id
@@ -5030,6 +5110,25 @@ static void record_grades_from_file(
     }
 
     offering=&offerings[offering_index];
+
+    if (calendar_state.grade_recording!=PHASE_ACTIVE)
+    {
+        printf(
+            "Grade recording time is not active.\n"
+        );
+        return;
+    }
+
+    if (offering->semester!=
+        calendar_state.current_semester)
+    {
+        printf(
+            "Grades can be imported only for the current "
+            "semester (%d).\n",
+            calendar_state.current_semester
+        );
+        return;
+    }
 
     read_line(
         "Enter CSV file path (student_id,grade): ",
@@ -5203,6 +5302,17 @@ static void faculty_record_grades(
 
     faculty=&faculty_members[faculty_index];
     offering=&offerings[offering_index];
+
+    if (offering->semester!=
+    calendar_state.current_semester)
+    {
+        printf(
+            "Grades can be recorded only for the current "
+            "semester (%d).\n",
+            calendar_state.current_semester
+        );
+        return;
+    }
 
     if (
         strcmp(
@@ -7607,6 +7717,8 @@ static int transition_calendar_phase(
 static void start_next_semester(void)
 {
     int next_semester;
+    int index;
+    int previous_semester;
 
     if (calendar_state.grade_recording!=
         PHASE_FINISHED)
@@ -7631,8 +7743,27 @@ static void start_next_semester(void)
             "greater than %d.\n",
             calendar_state.current_semester
         );
-
         return;
+    }
+
+    previous_semester=
+    calendar_state.current_semester;
+
+    for (index=0; index<request_count; index++)
+    {
+        if (requests[index].semester==
+                previous_semester &&
+            strcmp(
+                requests[index].status,
+                "pending"
+            )==0)
+        {
+            copy_str(
+                requests[index].status,
+                "rejected",
+                sizeof(requests[index].status)
+            );
+        }
     }
 
     calendar_state.current_semester=
