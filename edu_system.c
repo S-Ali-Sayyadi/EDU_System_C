@@ -158,6 +158,23 @@ static int contains_ignore_case(
     const char *key
 );
 
+static int is_digits_only(const char *text);
+static int is_valid_section(const char *section);
+static int national_code_exists(const char *national_code);
+
+static int prerequisites_exist(
+    const char *prerequisites,
+    const char *course_id
+);
+
+static int student_record_is_valid(
+    const Student *student
+);
+
+static int faculty_record_is_valid(
+    const Faculty *faculty
+);
+
 static int verify_security_answers(
     const char *expected_birth,
     const char *expected_school,
@@ -521,6 +538,176 @@ static int contains_ignore_case(
     }
     return 0;
 }
+
+static int is_digits_only(const char *text)
+{
+    size_t index;
+
+    if (text==NULL || text[0]=='\0')
+    {
+        return 0;
+    }
+
+    for (index=0; text[index]!='\0'; index++)
+    {
+        if (!isdigit((unsigned char)text[index]))
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int is_valid_section(const char *section)
+{
+    return strcmp(section,"BSc")==0 ||
+        strcmp(section,"MSc")==0 ||
+        strcmp(section,"PhD")==0;
+}
+
+static int national_code_exists(const char *national_code)
+{
+    int index;
+
+    for (index=0; index<student_count; index++)
+    {
+        if (strcmp(
+                students[index].national_code,
+                national_code
+            )==0)
+        {
+            return 1;
+        }
+    }
+
+    for (index=0; index<faculty_count; index++)
+    {
+        if (strcmp(
+                faculty_members[index].national_code,
+                national_code
+            )==0)
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int prerequisites_exist(
+    const char *prerequisites,
+    const char *course_id
+)
+{
+    char copy[STR_SIZE];
+    char *prerequisite;
+
+    if (prerequisites==NULL ||
+        prerequisites[0]=='\0' ||
+        strcmp(prerequisites,"-")==0)
+    {
+        return 1;
+    }
+
+    copy_str(
+        copy,
+        prerequisites,
+        sizeof(copy)
+    );
+
+    prerequisite=strtok(copy,",");
+
+    while (prerequisite!=NULL)
+    {
+        trim(prerequisite);
+
+        if (prerequisite[0]=='\0' ||
+            strcmp(prerequisite,course_id)==0 ||
+            find_course_index(prerequisite)==-1)
+        {
+            return 0;
+        }
+
+        prerequisite=strtok(NULL,",");
+    }
+
+    return 1;
+}
+
+static int student_record_is_valid(
+    const Student *student
+)
+{
+    if (student==NULL)
+    {
+        return 0;
+    }
+
+    if (student->first_name[0]=='\0' ||
+        student->last_name[0]=='\0' ||
+        student->student_id[0]=='\0' ||
+        student->national_code[0]=='\0' ||
+        student->field[0]=='\0' ||
+        student->section[0]=='\0' ||
+        student->mentor[0]=='\0' ||
+        student->department[0]=='\0' ||
+        student->answer_birth[0]=='\0' ||
+        student->answer_school[0]=='\0' ||
+        student->answer_book[0]=='\0' ||
+        student->answer_bike[0]=='\0' ||
+        student->password[0]=='\0')
+    {
+        return 0;
+    }
+
+    if (!is_digits_only(student->student_id) ||
+        !is_digits_only(student->national_code) ||
+        strlen(student->national_code)!=10 ||
+        student->entrance_year<=0 ||
+        !is_valid_section(student->section))
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+static int faculty_record_is_valid(
+    const Faculty *faculty
+)
+{
+    if (faculty==NULL)
+    {
+        return 0;
+    }
+
+    if (faculty->first_name[0]=='\0' ||
+        faculty->last_name[0]=='\0' ||
+        faculty->faculty_id[0]=='\0' ||
+        faculty->national_code[0]=='\0' ||
+        faculty->field[0]=='\0' ||
+        faculty->degree[0]=='\0' ||
+        faculty->department[0]=='\0' ||
+        faculty->password[0]=='\0' ||
+        faculty->answer_birth[0]=='\0' ||
+        faculty->answer_school[0]=='\0' ||
+        faculty->answer_book[0]=='\0' ||
+        faculty->answer_bike[0]=='\0')
+    {
+        return 0;
+    }
+
+    if (!is_digits_only(faculty->national_code) ||
+        strlen(faculty->national_code)!=10 ||
+        faculty->entrance_year<=0)
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
 
 static int verify_security_answers(
     const char *expected_birth,
@@ -6548,6 +6735,12 @@ static void register_student(void)
         return;
     }
 
+    if (!is_digits_only(student_id))
+    {
+        printf("Student ID must contain only digits.\n");
+        return;
+    }
+
     if (find_student_index(student_id)!=-1)
     {
         printf("This student ID already exists.\n");
@@ -6615,15 +6808,6 @@ static void register_student(void)
         sizeof(student->password)
     );
 
-    if (student->password[0]=='\0')
-    {
-        copy_str(
-            student->password,
-            "123456",
-            sizeof(student->password)
-        );
-    }
-
     read_line(
         "Where were you born? ",
         student->answer_birth,
@@ -6647,6 +6831,23 @@ static void register_student(void)
         student->answer_bike,
         sizeof(student->answer_bike)
     );
+
+    if (!student_record_is_valid(student))
+    {
+        printf(
+            "All fields must be valid and section must be "
+            "BSc, MSc or PhD.\n"
+        );
+        memset(student,0,sizeof(*student));
+        return;
+    }
+
+    if (national_code_exists(student->national_code))
+    {
+        printf("This national code already exists.\n");
+        memset(student,0,sizeof(*student));
+        return;
+    }
 
     student_count++;
 
@@ -6689,6 +6890,7 @@ static void import_students_file(void)
         char extra[2];
         int field_count;
         int entrance_year;
+        int index;
 
         line[strcspn(line, "\r\n")]='\0';
         trim(line);
@@ -6737,39 +6939,34 @@ static void import_students_file(void)
             continue;
         }
 
-        if (field_count<13 || field_count>14)
+        if (field_count!=14)
         {
             invalid_count++;
             continue;
         }
 
-        if (
-            fields[0][0]=='\0' ||
-            fields[1][0]=='\0' ||
-            fields[2][0]=='\0' ||
-            fields[3][0]=='\0' ||
-            fields[4][0]=='\0' ||
-            fields[5][0]=='\0' ||
-            fields[6][0]=='\0' ||
-            fields[7][0]=='\0' ||
-            fields[8][0]=='\0' ||
-            fields[9][0]=='\0' ||
-            fields[10][0]=='\0' ||
-            fields[11][0]=='\0' ||
-            fields[12][0]=='\0' ||
+        for (index=0; index<14; index++)
+        {
+            if (fields[index][0]=='\0')
+            {
+                break;
+            }
+        }
+
+        if (index<14 ||
             sscanf(
                 fields[5],
                 "%d %1s",
                 &entrance_year,
                 extra
-            )!=1
-        )
+            )!=1)
         {
             invalid_count++;
             continue;
         }
 
-        if (find_student_index(fields[2])!=-1)
+        if (find_student_index(fields[2])!=-1 ||
+            national_code_exists(fields[3]))
         {
             duplicate_count++;
             continue;
@@ -6855,24 +7052,16 @@ static void import_students_file(void)
             sizeof(student.answer_bike)
         );
 
-        if (
-            field_count==14 &&
-            fields[13][0]!='\0'
-        )
+        copy_str(
+            student.password,
+            fields[13],
+            sizeof(student.password)
+        );
+
+        if (!student_record_is_valid(&student))
         {
-            copy_str(
-                student.password,
-                fields[13],
-                sizeof(student.password)
-            );
-        }
-        else
-        {
-            copy_str(
-                student.password,
-                "123456",
-                sizeof(student.password)
-            );
+            invalid_count++;
+            continue;
         }
 
         students[student_count]=student;
@@ -6895,7 +7084,7 @@ static void import_students_file(void)
     if (duplicate_count>0)
     {
         printf(
-            "Skipped duplicate student IDs: %d\n",
+            "Skipped duplicate student IDs or national codes: %d\n",
             duplicate_count
         );
     }
@@ -7243,15 +7432,6 @@ static void register_faculty(void)
         sizeof(faculty->password)
     );
 
-    if (faculty->password[0]=='\0')
-    {
-        copy_str(
-            faculty->password,
-            "123456",
-            sizeof(faculty->password)
-        );
-    }
-
     read_line(
         "Where were you born? ",
         faculty->answer_birth,
@@ -7275,6 +7455,20 @@ static void register_faculty(void)
         faculty->answer_bike,
         sizeof(faculty->answer_bike)
     );
+
+    if (!faculty_record_is_valid(faculty))
+    {
+        printf("All faculty fields must be valid.\n");
+        memset(faculty,0,sizeof(*faculty));
+        return;
+    }
+
+    if (national_code_exists(faculty->national_code))
+    {
+        printf("This national code already exists.\n");
+        memset(faculty,0,sizeof(*faculty));
+        return;
+    }
 
     faculty_count++;
 
@@ -7317,6 +7511,7 @@ static void import_faculty_file(void)
         char extra[2];
         int field_count;
         int entrance_year;
+        int index;
 
         line[strcspn(line, "\r\n")]='\0';
         trim(line);
@@ -7365,34 +7560,34 @@ static void import_faculty_file(void)
             continue;
         }
 
-        if (field_count<8 || field_count>13)
+        if (field_count!=13)
         {
             invalid_count++;
             continue;
         }
 
-        if (
-            fields[0][0]=='\0' ||
-            fields[1][0]=='\0' ||
-            fields[2][0]=='\0' ||
-            fields[3][0]=='\0' ||
-            fields[4][0]=='\0' ||
-            fields[5][0]=='\0' ||
-            fields[6][0]=='\0' ||
-            fields[7][0]=='\0' ||
+        for (index=0; index<13; index++)
+        {
+            if (fields[index][0]=='\0')
+            {
+                break;
+            }
+        }
+
+        if (index<13 ||
             sscanf(
                 fields[5],
                 "%d %1s",
                 &entrance_year,
                 extra
-            )!=1
-        )
+            )!=1)
         {
             invalid_count++;
             continue;
         }
 
-        if (find_faculty_index(fields[2])!=-1)
+        if (find_faculty_index(fields[2])!=-1 ||
+            national_code_exists(fields[3]))
         {
             duplicate_count++;
             continue;
@@ -7448,104 +7643,40 @@ static void import_faculty_file(void)
             sizeof(faculty.department)
         );
 
-        if (
-            field_count>=9 &&
-            fields[8][0]!='\0'
-        )
-        {
-            copy_str(
-                faculty.password,
-                fields[8],
-                sizeof(faculty.password)
-            );
-        }
-        else
-        {
-            copy_str(
-                faculty.password,
-                "123456",
-                sizeof(faculty.password)
-            );
-        }
+        copy_str(
+            faculty.password,
+            fields[8],
+            sizeof(faculty.password)
+        );
 
-        if (
-            field_count>=10 &&
-            fields[9][0]!='\0'
-        )
-        {
-            copy_str(
-                faculty.answer_birth,
-                fields[9],
-                sizeof(faculty.answer_birth)
-            );
-        }
-        else
-        {
-            copy_str(
-                faculty.answer_birth,
-                "Tehran",
-                sizeof(faculty.answer_birth)
-            );
-        }
+        copy_str(
+            faculty.answer_birth,
+            fields[9],
+            sizeof(faculty.answer_birth)
+        );
 
-        if (
-        field_count>=11 &&
-        fields[10][0]!='\0'
-        )
-        {
-            copy_str(
-                faculty.answer_school,
-                fields[10],
-                sizeof(faculty.answer_school)
-            );
-        }
-        else
-        {
-            copy_str(
-                faculty.answer_school,
-                "Sharif High School",
-                sizeof(faculty.answer_school)
-            );
-        }
+        copy_str(
+            faculty.answer_school,
+            fields[10],
+            sizeof(faculty.answer_school)
+        );
 
-        if (
-            field_count>=12 &&
-            fields[11][0]!='\0'
-        )
-        {
-            copy_str(
-                faculty.answer_book,
-                fields[11],
-                sizeof(faculty.answer_book)
-            );
-        }
-        else
-        {
-            copy_str(
-                faculty.answer_book,
-                "1984",
-                sizeof(faculty.answer_book)
-            );
-        }
+        copy_str(
+            faculty.answer_book,
+            fields[11],
+            sizeof(faculty.answer_book)
+        );
 
-        if (
-            field_count>=13 &&
-            fields[12][0]!='\0'
-        )
+        copy_str(
+            faculty.answer_bike,
+            fields[12],
+            sizeof(faculty.answer_bike)
+        );
+
+        if (!faculty_record_is_valid(&faculty))
         {
-            copy_str(
-                faculty.answer_bike,
-                fields[12],
-                sizeof(faculty.answer_bike)
-            );
-        }
-        else
-        {
-            copy_str(
-                faculty.answer_bike,
-                "Blue",
-                sizeof(faculty.answer_bike)
-            );
+            invalid_count++;
+            continue;
         }
 
         faculty_members[faculty_count]=faculty;
@@ -7568,7 +7699,7 @@ static void import_faculty_file(void)
     if (duplicate_count>0)
     {
         printf(
-            "Skipped duplicate faculty IDs: %d\n",
+            "Skipped duplicate faculty IDs or national codes: %d\n",
             duplicate_count
         );
     }
@@ -7833,10 +7964,10 @@ static void register_course(void)
 
     units=read_int("Number of units: ");
 
-    if (units<=0)
+    if (units<=0 || units>6)
     {
         printf(
-            "The number of units must be greater than zero.\n"
+            "The number of units must be between 1 and 6.\n"
         );
 
         memset(course, 0, sizeof(*course));
@@ -7860,11 +7991,31 @@ static void register_course(void)
         );
     }
 
+    if (!prerequisites_exist(
+            course->prerequisites,
+            course->course_id
+        ))
+    {
+        printf(
+            "Every prerequisite must be an existing "
+            "course and cannot be the course itself.\n"
+        );
+        memset(course,0,sizeof(*course));
+        return;
+    }
+
     read_line(
         "Section: ",
         course->section,
         sizeof(course->section)
     );
+
+    if (!is_valid_section(course->section))
+    {
+        printf("Section must be BSc, MSc or PhD.\n");
+        memset(course,0,sizeof(*course));
+        return;
+    }
 
     read_line(
         "Field: ",
@@ -7877,6 +8028,14 @@ static void register_course(void)
     course->department,
     sizeof(course->department)
 );
+
+    if (course->field[0]=='\0' ||
+        course->department[0]=='\0')
+    {
+        printf("Field and department cannot be empty.\n");
+        memset(course,0,sizeof(*course));
+        return;
+    }
 
     if (calendar_state.offering==PHASE_NOT_STARTED)
     {
