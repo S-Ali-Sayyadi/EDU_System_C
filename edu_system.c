@@ -288,6 +288,21 @@ static double read_double(const char *prompt)
 static void show_main_menu(void);
 
 static void list_offering_students(int offering_index);
+
+static void calculate_student_gpa(
+    const char *student_id,
+    int semester_filter,
+    int *enrolled_count_output,
+    int *passed_count_output,
+    int *failed_count_output,
+    double *gpa_output
+);
+
+static void show_semester_report(
+    int student_index,
+    int semester
+);
+
 static void student_report_card(int student_index);
 
 static void copy_str(char *destination,const char *source,size_t size)
@@ -4398,24 +4413,135 @@ static void faculty_manage_offering(int faculty_index)
     }
 }
 
-static void student_report_card(int student_index)
+static void calculate_student_gpa(
+    const char *student_id,
+    int semester_filter,
+    int *enrolled_count_output,
+    int *passed_count_output,
+    int *failed_count_output,
+    double *gpa_output
+)
+{
+    int offering_index;
+    int enrollment_index;
+    int course_index;
+    int units_sum=0;
+    double weighted_sum=0.0;
+
+    *enrolled_count_output=0;
+    *passed_count_output=0;
+    *failed_count_output=0;
+    *gpa_output=0.0;
+
+    for (
+        offering_index=0;
+        offering_index<offering_count;
+        offering_index++
+    )
+    {
+        Offering *offering=
+            &offerings[offering_index];
+
+        Enrollment *enrollment;
+
+        if (
+            semester_filter!=0 &&
+            offering->semester!=semester_filter
+        )
+        {
+            continue;
+        }
+
+        enrollment_index=offering_has_student(
+            offering_index,
+            student_id
+        );
+
+        if (enrollment_index==-1)
+        {
+            continue;
+        }
+
+        (*enrolled_count_output)++;
+
+        enrollment=
+            &offering->enrollments[enrollment_index];
+
+        if (enrollment->grade<0)
+        {
+            continue;
+        }
+
+        if (enrollment->grade>=PASSING_GRADE)
+        {
+            (*passed_count_output)++;
+        }
+        else
+        {
+            (*failed_count_output)++;
+        }
+
+        course_index=find_course_index(
+            offering->course_id
+        );
+
+        if (
+            course_index==-1 ||
+            courses[course_index].units<=0
+        )
+        {
+            continue;
+        }
+
+        weighted_sum+=
+            enrollment->grade *
+            courses[course_index].units;
+
+        units_sum+=courses[course_index].units;
+    }
+
+    if (units_sum>0)
+    {
+        *gpa_output=
+            weighted_sum/units_sum;
+    }
+}
+
+static void show_semester_report(
+    int student_index,
+    int semester
+)
 {
     Student *student;
     Offering *offering;
     Enrollment *enrollment;
+
     int offering_index;
     int enrollment_index;
     int course_index;
-    int units;
-    int total_units=0;
+    int faculty_index;
+
+    int enrolled_count;
+    int passed_count;
+    int failed_count;
     int found=0;
-    double weighted_sum=0.0;
+
+    double gpa;
+
+    if (semester<=0)
+    {
+        printf(
+            "Semester number must be greater than zero.\n"
+        );
+
+        return;
+    }
 
     student=&students[student_index];
 
     printf("\n");
     printf("----------------------------------------\n");
-    printf("Student Report Card\n");
+    printf("Semester Report Card\n");
     printf("----------------------------------------\n");
 
     printf(
@@ -4429,12 +4555,24 @@ static void student_report_card(int student_index)
         student->student_id
     );
 
+    printf(
+        "Semester: %d\n",
+        semester
+    );
+
     for (
         offering_index=0;
         offering_index<offering_count;
         offering_index++
     )
     {
+        offering=&offerings[offering_index];
+
+        if (offering->semester!=semester)
+        {
+            continue;
+        }
+
         enrollment_index=offering_has_student(
             offering_index,
             student->student_id
@@ -4445,37 +4583,62 @@ static void student_report_card(int student_index)
             continue;
         }
 
-        found=1;
-
-        offering=&offerings[offering_index];
-
         enrollment=
             &offering->enrollments[enrollment_index];
 
-        course_index=
-            find_course_index(offering->course_id);
+        course_index=find_course_index(
+            offering->course_id
+        );
+
+        faculty_index=find_faculty_index(
+            offering->faculty_id
+        );
 
         printf("\n");
-        printf("Course ID: %s\n", offering->course_id);
-        printf("Semester: %d\n", offering->semester);
-
-        units=0;
+        printf(
+            "Course ID: %s\n",
+            offering->course_id
+        );
 
         if (course_index!=-1)
         {
-            units=courses[course_index].units;
-
             printf(
                 "Course name: %s\n",
                 courses[course_index].name
             );
 
-            printf("Units: %d\n", units);
+            printf(
+                "Units: %d\n",
+                courses[course_index].units
+            );
+        }
+        else
+        {
+            printf("Course name: Unknown\n");
+            printf("Units: Unknown\n");
+        }
+
+        if (faculty_index!=-1)
+        {
+            printf(
+                "Instructor: Dr. %s %s\n",
+                faculty_members[
+                    faculty_index
+                ].first_name,
+                faculty_members[
+                    faculty_index
+                ].last_name
+            );
+        }
+        else
+        {
+            printf("Instructor: Unknown\n");
         }
 
         if (enrollment->grade<0)
         {
             printf("Grade: Not recorded\n");
+            printf("Passed: Not available\n");
         }
         else
         {
@@ -4484,43 +4647,179 @@ static void student_report_card(int student_index)
                 enrollment->grade
             );
 
-            if (units>0)
-            {
-                weighted_sum+=
-                    enrollment->grade*units;
-
-                total_units+=units;
-            }
+            printf(
+                "Passed: %s\n",
+                enrollment->grade>=PASSING_GRADE
+                    ? "Yes"
+                    : "No"
+            );
         }
+
+        found=1;
     }
 
     if (!found)
     {
         printf(
-            "\nNo courses are available "
-            "in your report card.\n"
+            "\nNo enrolled courses were found "
+            "for this semester.\n"
         );
+
         return;
     }
 
-    if (total_units>0)
+    calculate_student_gpa(
+        student->student_id,
+        semester,
+        &enrolled_count,
+        &passed_count,
+        &failed_count,
+        &gpa
+    );
+
+    printf("\nSemester summary:\n");
+
+    printf(
+        "Enrolled courses: %d\n",
+        enrolled_count
+    );
+
+    printf(
+        "Passed courses: %d\n",
+        passed_count
+    );
+
+    printf(
+        "Failed courses: %d\n",
+        failed_count
+    );
+
+    printf(
+        "Semester GPA: %.2f\n",
+        gpa
+    );
+}
+
+static void student_report_card(int student_index)
+{
+    Student *student=
+        &students[student_index];
+
+    int enrolled_count;
+    int passed_count;
+    int failed_count;
+    int option;
+    int semester;
+
+    double gpa;
+
+    while (1)
     {
+        calculate_student_gpa(
+            student->student_id,
+            0,
+            &enrolled_count,
+            &passed_count,
+            &failed_count,
+            &gpa
+        );
+
         printf("\n");
+        printf("----------------------------------------\n");
+        printf("Student Report Card\n");
+        printf("----------------------------------------\n");
+
         printf(
-            "Recorded units: %d\n",
-            total_units
+            "Student ID: %s\n",
+            student->student_id
         );
 
         printf(
-            "Average: %.2f\n",
-            weighted_sum / total_units
+            "First name: %s\n",
+            student->first_name
         );
-    }
-    else
-    {
+
         printf(
-            "\nNo grades have been recorded yet.\n"
+            "Last name: %s\n",
+            student->last_name
         );
+
+        printf(
+            "National code: %s\n",
+            student->national_code
+        );
+
+        printf(
+            "Field: %s\n",
+            student->field
+        );
+
+        printf(
+            "Entrance year: %d\n",
+            student->entrance_year
+        );
+
+        printf(
+            "Section: %s\n",
+            student->section
+        );
+
+        printf(
+            "Mentor: %s\n",
+            student->mentor
+        );
+
+        printf(
+            "Department: %s\n",
+            student->department
+        );
+
+        printf(
+            "Overall enrolled courses: %d\n",
+            enrolled_count
+        );
+
+        printf(
+            "Overall passed courses: %d\n",
+            passed_count
+        );
+
+        printf(
+            "Overall failed courses: %d\n",
+            failed_count
+        );
+
+        printf(
+            "Overall GPA: %.2f\n",
+            gpa
+        );
+
+        printf("\n");
+        printf("1. View a semester report\n");
+        printf("2. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            semester=
+                read_int("Enter semester number: ");
+
+            show_semester_report(
+                student_index,
+                semester
+            );
+        }
+        else if (option==2)
+        {
+            return;
+        }
+        else
+        {
+            printf(
+                "Invalid option. Please try again.\n"
+            );
+        }
     }
 }
 
