@@ -270,8 +270,18 @@ static void faculty_dashboard(int faculty_index);
 static void admin_dashboard(void);
 
 static void trim(char *text);
-static char *next_token(char **cursor);
-static void read_line(const char *prompt, char *output, size_t size);
+
+static int parse_csv_line(
+    char *line,
+    char *fields[],
+    int max_fields
+);
+
+static void read_line(
+    const char *prompt,
+    char *output,
+    size_t size
+);
 static int read_int(const char *prompt);
 static double read_double(const char *prompt)
 {
@@ -5374,13 +5384,12 @@ static void import_students_file(void)
     char path[STR_SIZE];
     char line[LINE_SIZE];
     FILE *file;
-
     int imported=0;
     int duplicate_count=0;
     int invalid_count=0;
 
     read_line(
-        "Enter file path to import students: ",
+        "Enter student CSV file path: ",
         path,
         sizeof(path)
     );
@@ -5389,7 +5398,7 @@ static void import_students_file(void)
 
     if (file==NULL)
     {
-        printf("Could not open the import file.\n");
+        printf("Could not open the CSV file.\n");
         return;
     }
 
@@ -5399,11 +5408,9 @@ static void import_students_file(void)
     )
     {
         Student student;
-        char *cursor;
         char *fields[13];
         char extra[2];
-
-        int field_index;
+        int field_count;
         int entrance_year;
 
         line[strcspn(line, "\r\n")]='\0';
@@ -5414,31 +5421,75 @@ static void import_students_file(void)
             continue;
         }
 
-        cursor=line;
+        field_count=parse_csv_line(
+            line,
+            fields,
+            13
+        );
 
-        for (field_index=0; field_index<13; field_index++)
+        /*
+         * Remove an optional UTF-8 BOM added by
+         * programs such as Microsoft Excel.
+         */
+        if (
+            field_count>0 &&
+            (unsigned char)fields[0][0]==0xEF &&
+            (unsigned char)fields[0][1]==0xBB &&
+            (unsigned char)fields[0][2]==0xBF
+        )
         {
-            fields[field_index]=next_token(&cursor);
-
-            if (fields[field_index]==NULL)
-            {
-                break;
-            }
+            memmove(
+                fields[0],
+                fields[0]+3,
+                strlen(fields[0]+3)+1
+            );
         }
 
-        if (field_index<12)
+        /*
+         * The CSV header is optional.
+         */
+        if (
+            field_count>=3 &&
+            strings_equal_ignore_case(
+                fields[0],
+                "first_name"
+            ) &&
+            strings_equal_ignore_case(
+                fields[1],
+                "last_name"
+            ) &&
+            strings_equal_ignore_case(
+                fields[2],
+                "student_id"
+            )
+        )
         {
-            invalid_count++;
             continue;
         }
 
-        if (fields[2][0]=='\0')
+        /*
+         * Twelve fields are required.
+         * Password, field 13, is optional.
+         */
+        if (field_count<12 || field_count>13)
         {
             invalid_count++;
             continue;
         }
 
         if (
+            fields[0][0]=='\0' ||
+            fields[1][0]=='\0' ||
+            fields[2][0]=='\0' ||
+            fields[3][0]=='\0' ||
+            fields[4][0]=='\0' ||
+            fields[5][0]=='\0' ||
+            fields[6][0]=='\0' ||
+            fields[7][0]=='\0' ||
+            fields[8][0]=='\0' ||
+            fields[9][0]=='\0' ||
+            fields[10][0]=='\0' ||
+            fields[11][0]=='\0' ||
             sscanf(
                 fields[5],
                 "%d %1s",
@@ -5532,8 +5583,7 @@ static void import_students_file(void)
         );
 
         if (
-            field_index>=13 &&
-            fields[12]!=NULL &&
+            field_count==13 &&
             fields[12][0]!='\0'
         )
         {
@@ -5580,7 +5630,7 @@ static void import_students_file(void)
     if (invalid_count>0)
     {
         printf(
-            "Skipped invalid lines: %d\n",
+            "Skipped invalid CSV lines: %d\n",
             invalid_count
         );
     }
@@ -5690,7 +5740,7 @@ static void admin_students_menu(void)
         printf("1. List students\n");
         printf("2. Search students\n");
         printf("3. Register one student\n");
-        printf("4. Import a group of students\n");
+        printf("4. Import students from CSV\n");
         printf("5. Delete a student\n");
         printf("6. Go back\n");
 
@@ -5917,13 +5967,12 @@ static void import_faculty_file(void)
     char path[STR_SIZE];
     char line[LINE_SIZE];
     FILE *file;
-
     int imported=0;
     int duplicate_count=0;
     int invalid_count=0;
 
     read_line(
-        "Enter file path to import faculty members: ",
+        "Enter faculty CSV file path: ",
         path,
         sizeof(path)
     );
@@ -5932,7 +5981,7 @@ static void import_faculty_file(void)
 
     if (file==NULL)
     {
-        printf("Could not open the import file.\n");
+        printf("Could not open the CSV file.\n");
         return;
     }
 
@@ -5942,11 +5991,9 @@ static void import_faculty_file(void)
     )
     {
         Faculty faculty;
-        char *cursor;
         char *fields[12];
         char extra[2];
-
-        int field_index;
+        int field_count;
         int entrance_year;
 
         line[strcspn(line, "\r\n")]='\0';
@@ -5957,31 +6004,70 @@ static void import_faculty_file(void)
             continue;
         }
 
-        cursor=line;
+        field_count=parse_csv_line(
+            line,
+            fields,
+            12
+        );
 
-        for (field_index=0; field_index<12; field_index++)
+        /*
+         * Remove an optional UTF-8 BOM.
+         */
+        if (
+            field_count>0 &&
+            (unsigned char)fields[0][0]==0xEF &&
+            (unsigned char)fields[0][1]==0xBB &&
+            (unsigned char)fields[0][2]==0xBF
+        )
         {
-            fields[field_index]=next_token(&cursor);
-
-            if (fields[field_index]==NULL)
-            {
-                break;
-            }
+            memmove(
+                fields[0],
+                fields[0]+3,
+                strlen(fields[0]+3)+1
+            );
         }
 
-        if (field_index<8)
+        /*
+         * The CSV header is optional.
+         */
+        if (
+            field_count>=3 &&
+            strings_equal_ignore_case(
+                fields[0],
+                "first_name"
+            ) &&
+            strings_equal_ignore_case(
+                fields[1],
+                "last_name"
+            ) &&
+            strings_equal_ignore_case(
+                fields[2],
+                "faculty_id"
+            )
+        )
         {
-            invalid_count++;
             continue;
         }
 
-        if (fields[2][0]=='\0')
+        /*
+         * The first eight fields are required.
+         * The remaining four fields are optional.
+         */
+        if (field_count<8 || field_count>12)
         {
             invalid_count++;
             continue;
         }
 
         if (
+            fields[0][0]=='\0' ||
+            fields[1][0]=='\0' ||
+            fields[2][0]=='\0' ||
+            fields[3][0]=='\0' ||
+            fields[4][0]=='\0' ||
+            fields[5][0]=='\0' ||
+            fields[6][0]=='\0' ||
+            fields[7][0]=='\0' ||
             sscanf(
                 fields[5],
                 "%d %1s",
@@ -6051,8 +6137,7 @@ static void import_faculty_file(void)
         );
 
         if (
-            field_index>=9 &&
-            fields[8]!=NULL &&
+            field_count>=9 &&
             fields[8][0]!='\0'
         )
         {
@@ -6072,8 +6157,7 @@ static void import_faculty_file(void)
         }
 
         if (
-            field_index>=10 &&
-            fields[9]!=NULL &&
+            field_count>=10 &&
             fields[9][0]!='\0'
         )
         {
@@ -6093,8 +6177,7 @@ static void import_faculty_file(void)
         }
 
         if (
-            field_index>=11 &&
-            fields[10]!=NULL &&
+            field_count>=11 &&
             fields[10][0]!='\0'
         )
         {
@@ -6114,8 +6197,7 @@ static void import_faculty_file(void)
         }
 
         if (
-            field_index>=12 &&
-            fields[11]!=NULL &&
+            field_count>=12 &&
             fields[11][0]!='\0'
         )
         {
@@ -6162,7 +6244,7 @@ static void import_faculty_file(void)
     if (invalid_count>0)
     {
         printf(
-            "Skipped invalid lines: %d\n",
+            "Skipped invalid CSV lines: %d\n",
             invalid_count
         );
     }
@@ -6284,7 +6366,7 @@ static void admin_faculty_menu(void)
         printf("1. List faculty members\n");
         printf("2. Search faculty members\n");
         printf("3. Register one faculty member\n");
-        printf("4. Import a group of faculty members\n");
+        printf("4. Import faculty from CSV\n");
         printf("5. Delete a faculty member\n");
         printf("6. Go back\n");
 
@@ -7005,32 +7087,134 @@ static void trim(char *text)
     }
 }
 
-static char *next_token(char **cursor)
+static int parse_csv_line(
+    char *line,
+    char *fields[],
+    int max_fields
+)
 {
-    char *start;
-    char *separator;
+    char *source;
+    char *destination;
+    char delimiter;
+    int field_count=0;
 
-    if (cursor==NULL || *cursor==NULL)
+    if (line==NULL || fields==NULL || max_fields<=0)
     {
-        return NULL;
+        return -1;
     }
 
-    start=*cursor;
-    separator=strchr(start, '|');
+    source=line;
+    destination=line;
 
-    if (separator!=NULL)
+    while (1)
     {
-        *separator='\0';
-        *cursor=separator+1;
-    }
-    else
-    {
-        *cursor=NULL;
+        char *field_start;
+
+        if (field_count>=max_fields)
+        {
+            return -1;
+        }
+
+        while (
+            *source!='\0' &&
+            isspace((unsigned char)*source)
+        )
+        {
+            source++;
+        }
+
+        field_start=destination;
+        fields[field_count++]=field_start;
+
+        if (*source=='"')
+        {
+            int closing_quote_found=0;
+
+            source++;
+
+            while (*source!='\0')
+            {
+                if (*source=='"')
+                {
+                    if (source[1]=='"')
+                    {
+                        *destination++='"';
+                        source+=2;
+                    }
+                    else
+                    {
+                        source++;
+                        closing_quote_found=1;
+                        break;
+                    }
+                }
+                else
+                {
+                    *destination++=*source++;
+                }
+            }
+
+            if (!closing_quote_found)
+            {
+                return -1;
+            }
+
+            while (
+                *source!='\0' &&
+                isspace((unsigned char)*source)
+            )
+            {
+                source++;
+            }
+
+            delimiter=*source;
+
+            if (delimiter!=',' && delimiter!='\0')
+            {
+                return -1;
+            }
+        }
+        else
+        {
+            while (*source!=',' && *source!='\0')
+            {
+                *destination++=*source++;
+            }
+
+            while (
+                destination>field_start &&
+                isspace((unsigned char)destination[-1])
+            )
+            {
+                destination--;
+            }
+
+            delimiter=*source;
+        }
+
+        *destination++='\0';
+
+        if (delimiter=='\0')
+        {
+            break;
+        }
+
+        source++;
+
+        if (*source=='\0')
+        {
+            if (field_count>=max_fields)
+            {
+                return -1;
+            }
+
+            fields[field_count++]=destination;
+            *destination='\0';
+            break;
+        }
     }
 
-    trim(start);
-
-    return start;
+    return field_count;
 }
 
 static void read_line(const char *prompt,char *output,size_t size)
