@@ -219,6 +219,59 @@ static void student_course_survey(int student_index);
 static int course_is_in_use(const char *course_id);
 static int faculty_is_in_use(const char *faculty_id);
 
+static void add_student_seed(
+    const char *first_name,
+    const char *last_name,
+    const char *student_id,
+    const char *national_code,
+    const char *field,
+    int entrance_year,
+    const char *section,
+    const char *mentor,
+    const char *department,
+    const char *answer_birth,
+    const char *answer_book,
+    const char *answer_bike,
+    const char *password
+);
+
+static void add_faculty_seed(
+    const char *first_name,
+    const char *last_name,
+    const char *faculty_id,
+    const char *national_code,
+    const char *field,
+    int entrance_year,
+    const char *degree,
+    const char *department,
+    const char *password
+);
+
+static void add_course_seed(
+    const char *name,
+    const char *course_id,
+    int units,
+    const char *prerequisites,
+    const char *section,
+    const char *field,
+    const char *department
+);
+
+static void add_offering_seed(
+    const char *course_id,
+    const char *faculty_id,
+    int semester,
+    int capacity,
+    const char *department,
+    const char *place
+);
+
+static void enroll_seed(
+    int offering_index,
+    const char *student_id,
+    double grade
+);
+
 static void initialize_sample_data(void);
 static void show_data_summary(void);
 
@@ -1630,86 +1683,826 @@ static int load_all(void)
     return loaded_any;
 }
 
-static void initialize_sample_data(void)
+static void add_student_seed(
+    const char *first_name,
+    const char *last_name,
+    const char *student_id,
+    const char *national_code,
+    const char *field,
+    int entrance_year,
+    const char *section,
+    const char *mentor,
+    const char *department,
+    const char *answer_birth,
+    const char *answer_book,
+    const char *answer_bike,
+    const char *password
+)
 {
     Student *student;
+
+    if (student_count>=MAX_STUDENTS)
+    {
+        return;
+    }
+
+    student=&students[student_count];
+
+    memset(
+        student,
+        0,
+        sizeof(*student)
+    );
+
+    copy_str(
+        student->first_name,
+        first_name,
+        sizeof(student->first_name)
+    );
+
+    copy_str(
+        student->last_name,
+        last_name,
+        sizeof(student->last_name)
+    );
+
+    copy_str(
+        student->student_id,
+        student_id,
+        sizeof(student->student_id)
+    );
+
+    copy_str(
+        student->national_code,
+        national_code,
+        sizeof(student->national_code)
+    );
+
+    copy_str(
+        student->field,
+        field,
+        sizeof(student->field)
+    );
+
+    student->entrance_year=entrance_year;
+
+    copy_str(
+        student->section,
+        section,
+        sizeof(student->section)
+    );
+
+    copy_str(
+        student->mentor,
+        mentor,
+        sizeof(student->mentor)
+    );
+
+    copy_str(
+        student->department,
+        department,
+        sizeof(student->department)
+    );
+
+    copy_str(
+        student->answer_birth,
+        answer_birth,
+        sizeof(student->answer_birth)
+    );
+
+    copy_str(
+        student->answer_book,
+        answer_book,
+        sizeof(student->answer_book)
+    );
+
+    copy_str(
+        student->answer_bike,
+        answer_bike,
+        sizeof(student->answer_bike)
+    );
+
+    copy_str(
+        student->password,
+        password,
+        sizeof(student->password)
+    );
+
+    student_count++;
+}
+
+static void add_faculty_seed(
+    const char *first_name,
+    const char *last_name,
+    const char *faculty_id,
+    const char *national_code,
+    const char *field,
+    int entrance_year,
+    const char *degree,
+    const char *department,
+    const char *password
+)
+{
     Faculty *faculty;
+
+    if (faculty_count>=MAX_FACULTY)
+    {
+        return;
+    }
+
+    faculty=&faculty_members[faculty_count];
+
+    memset(
+        faculty,
+        0,
+        sizeof(*faculty)
+    );
+
+    copy_str(
+        faculty->first_name,
+        first_name,
+        sizeof(faculty->first_name)
+    );
+
+    copy_str(
+        faculty->last_name,
+        last_name,
+        sizeof(faculty->last_name)
+    );
+
+    copy_str(
+        faculty->faculty_id,
+        faculty_id,
+        sizeof(faculty->faculty_id)
+    );
+
+    copy_str(
+        faculty->national_code,
+        national_code,
+        sizeof(faculty->national_code)
+    );
+
+    copy_str(
+        faculty->field,
+        field,
+        sizeof(faculty->field)
+    );
+
+    faculty->entrance_year=entrance_year;
+
+    copy_str(
+        faculty->degree,
+        degree,
+        sizeof(faculty->degree)
+    );
+
+    copy_str(
+        faculty->department,
+        department,
+        sizeof(faculty->department)
+    );
+
+    copy_str(
+        faculty->password,
+        password,
+        sizeof(faculty->password)
+    );
+
+    copy_str(
+        faculty->answer_birth,
+        "Tehran",
+        sizeof(faculty->answer_birth)
+    );
+
+    copy_str(
+        faculty->answer_book,
+        "1984",
+        sizeof(faculty->answer_book)
+    );
+
+    copy_str(
+        faculty->answer_bike,
+        "Blue",
+        sizeof(faculty->answer_bike)
+    );
+
+    faculty_count++;
+}
+
+static void add_course_seed(
+    const char *name,
+    const char *course_id,
+    int units,
+    const char *prerequisites,
+    const char *section,
+    const char *field,
+    const char *department
+)
+{
     Course *course;
 
-    if (student_count < MAX_STUDENTS && find_student_index("404123456")==-1)
+    if (course_count>=MAX_COURSES)
     {
-        student = &students[student_count];
-
-        memset(student, 0, sizeof(*student));
-
-        copy_str(student->first_name,"Ali",sizeof(student->first_name));
-
-        copy_str(student->last_name,"Ahmadi",sizeof(student->last_name));
-
-        copy_str(student->student_id,"404123456",sizeof(student->student_id));
-
-        copy_str(student->field,"Computer Engineering",sizeof(student->field));
-
-        copy_str(student->section,"BSc",sizeof(student->section));
-
-        copy_str(student->password,"123456",sizeof(student->password));
-
-	copy_str(student->answer_birth,"Tehran",sizeof(student->answer_birth));
-
-	copy_str(student->answer_book,"Shahnameh",sizeof(student->answer_book));
-
-	copy_str(student->answer_bike,"Blue",sizeof(student->answer_bike));
-
-        student->entrance_year=1404;
-        student_count++;
+        return;
     }
 
-    if (faculty_count < MAX_FACULTY && find_faculty_index("FCS105")==-1)
+    course=&courses[course_count];
+
+    memset(
+        course,
+        0,
+        sizeof(*course)
+    );
+
+    copy_str(
+        course->name,
+        name,
+        sizeof(course->name)
+    );
+
+    copy_str(
+        course->course_id,
+        course_id,
+        sizeof(course->course_id)
+    );
+
+    course->units=units;
+
+    copy_str(
+        course->prerequisites,
+        prerequisites,
+        sizeof(course->prerequisites)
+    );
+
+    copy_str(
+        course->section,
+        section,
+        sizeof(course->section)
+    );
+
+    copy_str(
+        course->field,
+        field,
+        sizeof(course->field)
+    );
+
+    copy_str(
+        course->department,
+        department,
+        sizeof(course->department)
+    );
+
+    course_count++;
+}
+
+static void add_offering_seed(
+    const char *course_id,
+    const char *faculty_id,
+    int semester,
+    int capacity,
+    const char *department,
+    const char *place
+)
+{
+    Offering *offering;
+
+    if (offering_count>=MAX_OFFERINGS)
     {
-        faculty=&faculty_members[faculty_count];
-
-        memset(faculty, 0, sizeof(*faculty));
-
-        copy_str(faculty->first_name,"Hossein",sizeof(faculty->first_name));
-
-        copy_str(faculty->last_name,"Asadi",sizeof(faculty->last_name));
-
-        copy_str(faculty->faculty_id,"FCS105",sizeof(faculty->faculty_id));
-
-        copy_str(faculty->field,"Computer Engineering",sizeof(faculty->field));
-
-        copy_str(faculty->degree,"PhD",sizeof(faculty->degree));
-
-        copy_str(faculty->password,"123456",sizeof(faculty->password));
-
-	copy_str(faculty->answer_birth,"Shiraz",sizeof(faculty->answer_birth));
-
-	copy_str(faculty->answer_book,"Golestan",sizeof(faculty->answer_book));
-
-	copy_str(faculty->answer_bike,"Red",sizeof(faculty->answer_bike));
-
-        faculty_count++;
+        return;
     }
 
-    if (course_count < MAX_COURSES && find_course_index("CS101")==-1)
+    offering=&offerings[offering_count];
+
+    memset(
+        offering,
+        0,
+        sizeof(*offering)
+    );
+
+    copy_str(
+        offering->course_id,
+        course_id,
+        sizeof(offering->course_id)
+    );
+
+    copy_str(
+        offering->faculty_id,
+        faculty_id,
+        sizeof(offering->faculty_id)
+    );
+
+    offering->semester=semester;
+    offering->capacity=capacity;
+    offering->enrolled_count=0;
+
+    copy_str(
+        offering->department,
+        department,
+        sizeof(offering->department)
+    );
+
+    copy_str(
+        offering->place,
+        place,
+        sizeof(offering->place)
+    );
+
+    offering_count++;
+}
+
+static void enroll_seed(
+    int offering_index,
+    const char *student_id,
+    double grade
+)
+{
+    Offering *offering;
+    Enrollment *enrollment;
+
+    if (
+        offering_index<0 ||
+        offering_index>=offering_count
+    )
     {
-        course=&courses[course_count];
-
-        memset(course, 0, sizeof(*course));
-
-        copy_str(course->name,"Fundamentals of Programming",sizeof(course->name));
-
-        copy_str(course->course_id,"CS101",sizeof(course->course_id));
-
-        copy_str(course->prerequisites,"-",sizeof(course->prerequisites));
-
-        copy_str(course->section,"BSc",sizeof(course->section));
-
-        copy_str(course->field,"Computer Engineering",sizeof(course->field));
-
-        course->units=3;
-        course_count++;
+        return;
     }
+
+    offering=&offerings[offering_index];
+
+    if (offering->enrolled_count>=MAX_ENROLLED)
+    {
+        return;
+    }
+
+    enrollment=
+        &offering->enrollments[
+            offering->enrolled_count
+        ];
+
+    memset(
+        enrollment,
+        0,
+        sizeof(*enrollment)
+    );
+
+    copy_str(
+        enrollment->student_id,
+        student_id,
+        sizeof(enrollment->student_id)
+    );
+
+    enrollment->grade=grade;
+    enrollment->survey_score=-1;
+
+    offering->enrolled_count++;
+}
+
+static void initialize_sample_data(void)
+{
+    memset(
+        students,
+        0,
+        sizeof(students)
+    );
+
+    memset(
+        faculty_members,
+        0,
+        sizeof(faculty_members)
+    );
+
+    memset(
+        courses,
+        0,
+        sizeof(courses)
+    );
+
+    memset(
+        offerings,
+        0,
+        sizeof(offerings)
+    );
+
+    memset(
+        requests,
+        0,
+        sizeof(requests)
+    );
+
+    student_count=0;
+    faculty_count=0;
+    course_count=0;
+    offering_count=0;
+    request_count=0;
+    next_request_id=1;
+
+    add_student_seed(
+        "Ali",
+        "Ahmadi",
+        "404123456",
+        "0123456789",
+        "Computer Engineering",
+        404,
+        "BSc",
+        "Hossein Asadi",
+        "Computer Engineering",
+        "Karaj",
+        "Anne Shirley",
+        "White",
+        "123456"
+    );
+
+    add_student_seed(
+        "Sara",
+        "Karimi",
+        "403234567",
+        "1234567890",
+        "Electrical Engineering",
+        403,
+        "MSc",
+        "Mehdi Rezaei",
+        "Electrical Engineering",
+        "Isfahan",
+        "The Little Prince",
+        "Blue",
+        "123456"
+    );
+
+    add_student_seed(
+        "Reza",
+        "Nouri",
+        "404345678",
+        "2345678901",
+        "Mechanical Engineering",
+        404,
+        "BSc",
+        "Leila Ahmadi",
+        "Mechanical Engineering",
+        "Shiraz",
+        "Pride and Prejudice",
+        "Red",
+        "123456"
+    );
+
+    add_student_seed(
+        "Rozhan",
+        "Azizi",
+        "402456789",
+        "3456789012",
+        "Civil Engineering",
+        402,
+        "PhD",
+        "Saeed Jamali",
+        "Civil Engineering",
+        "Sanandaj",
+        "The Alchemist",
+        "Green",
+        "123456"
+    );
+
+    add_student_seed(
+        "Diako",
+        "Gholami",
+        "403567890",
+        "4567890123",
+        "Software Engineering",
+        403,
+        "MSc",
+        "Parisa Moradi",
+        "Computer Engineering",
+        "Kermanshah",
+        "1984",
+        "Black",
+        "123456"
+    );
+
+    add_faculty_seed(
+        "Hossein",
+        "Asadi",
+        "FCS105",
+        "9911111111",
+        "Computer Engineering",
+        1395,
+        "PhD",
+        "Computer Engineering",
+        "123456"
+    );
+
+    add_faculty_seed(
+        "Maryam",
+        "Ghafari",
+        "FEE203",
+        "9922222222",
+        "Electrical Engineering",
+        1396,
+        "PhD",
+        "Electrical Engineering",
+        "123456"
+    );
+
+    add_faculty_seed(
+        "Reza",
+        "Karimi",
+        "FME315",
+        "9933333333",
+        "Mechanical Engineering",
+        1394,
+        "PhD",
+        "Mechanical Engineering",
+        "123456"
+    );
+
+    add_faculty_seed(
+        "Sara",
+        "Nikpour",
+        "FCS107",
+        "9944444444",
+        "Software Engineering",
+        1397,
+        "PhD",
+        "Computer Engineering",
+        "123456"
+    );
+
+    add_faculty_seed(
+        "Hasan",
+        "Rezaei",
+        "FCS101",
+        "9955555555",
+        "Computer Engineering",
+        1393,
+        "PhD",
+        "Computer Engineering",
+        "123456"
+    );
+
+    add_course_seed(
+        "Fundamentals of Programming",
+        "CS101",
+        3,
+        "-",
+        "BSc",
+        "Computer Engineering",
+        "Computer Engineering"
+    );
+
+    add_course_seed(
+        "Data Structures",
+        "CS201",
+        3,
+        "CS101",
+        "BSc",
+        "Computer Engineering",
+        "Computer Engineering"
+    );
+
+    add_course_seed(
+        "Advanced Programming",
+        "CS305",
+        4,
+        "CS201",
+        "BSc",
+        "Computer Engineering",
+        "Computer Engineering"
+    );
+
+    add_course_seed(
+        "Digital Logic Design",
+        "EE112",
+        3,
+        "EE101",
+        "BSc",
+        "Electrical Engineering",
+        "Electrical Engineering"
+    );
+
+    add_course_seed(
+        "Thermodynamics I",
+        "ME301",
+        3,
+        "-",
+        "BSc",
+        "Mechanical Engineering",
+        "Mechanical Engineering"
+    );
+
+    add_course_seed(
+        "Software Engineering",
+        "CS401",
+        3,
+        "CS305",
+        "MSc",
+        "Computer Engineering",
+        "Computer Engineering"
+    );
+
+    add_course_seed(
+        "General Physics 2",
+        "PHY102",
+        3,
+        "PHY101",
+        "BSc",
+        "General",
+        "Physics"
+    );
+
+    add_course_seed(
+        "Logical Design",
+        "CS103",
+        3,
+        "-",
+        "BSc",
+        "Computer Engineering",
+        "Computer Engineering"
+    );
+
+    add_course_seed(
+        "Calculus 2",
+        "MATH102",
+        4,
+        "MATH101",
+        "BSc",
+        "General",
+        "Mathematics"
+    );
+
+    add_course_seed(
+        "Discrete Mathematics",
+        "CS104",
+        3,
+        "-",
+        "BSc",
+        "Computer Engineering",
+        "Computer Engineering"
+    );
+
+    add_offering_seed(
+        "CS101",
+        "FCS105",
+        14042,
+        40,
+        "Computer Engineering",
+        "Room 201, Science Building"
+    );
+
+    add_offering_seed(
+        "CS201",
+        "FCS105",
+        14042,
+        35,
+        "Computer Engineering",
+        "Room 405, Science Building"
+    );
+
+    add_offering_seed(
+        "EE112",
+        "FEE203",
+        14042,
+        30,
+        "Electrical Engineering",
+        "Lab 201, Engineering Hall"
+    );
+
+    add_offering_seed(
+        "ME301",
+        "FME315",
+        14042,
+        40,
+        "Mechanical Engineering",
+        "Room 102, Main Hall"
+    );
+
+    add_offering_seed(
+        "CS401",
+        "FCS107",
+        14042,
+        25,
+        "Computer Engineering",
+        "Room 305, IT Center"
+    );
+
+    add_offering_seed(
+        "PHY102",
+        "FCS101",
+        14042,
+        45,
+        "Physics",
+        "Room 301, Main Hall"
+    );
+
+    add_offering_seed(
+        "CS103",
+        "FCS101",
+        14042,
+        35,
+        "Computer Engineering",
+        "Room 204, Science Building"
+    );
+
+    add_offering_seed(
+        "MATH102",
+        "FCS101",
+        14042,
+        50,
+        "Mathematics",
+        "Room 110, Main Hall"
+    );
+
+    add_offering_seed(
+        "CS104",
+        "FCS101",
+        14042,
+        30,
+        "Computer Engineering",
+        "Room 207, Science Building"
+    );
+
+    add_offering_seed(
+        "CS201",
+        "FCS105",
+        14041,
+        35,
+        "Computer Engineering",
+        "Room 203, Science Building"
+    );
+
+    add_offering_seed(
+        "CS305",
+        "FCS105",
+        14032,
+        30,
+        "Computer Engineering",
+        "Room 205, Science Building"
+    );
+
+    add_offering_seed(
+        "CS401",
+        "FCS105",
+        14031,
+        25,
+        "Computer Engineering",
+        "Room 207, Science Building"
+    );
+
+    enroll_seed(
+        0,
+        "404123456",
+        18.25
+    );
+
+    enroll_seed(
+        5,
+        "404123456",
+        14.00
+    );
+
+    enroll_seed(
+        6,
+        "404123456",
+        16.75
+    );
+
+    enroll_seed(
+        7,
+        "404123456",
+        12.50
+    );
+
+    enroll_seed(
+        8,
+        "404123456",
+        9.75
+    );
+
+    enroll_seed(
+        1,
+        "404123456",
+        -1.00
+    );
+
+    enroll_seed(
+        2,
+        "403234567",
+        -1.00
+    );
+
+    enroll_seed(
+        3,
+        "404345678",
+        -1.00
+    );
+
+    enroll_seed(
+        4,
+        "403567890",
+        -1.00
+    );
+
+    calendar_state.offering=0;
+    calendar_state.unit_selection=0;
+    calendar_state.classes_exams=0;
+    calendar_state.grade_recording=0;
+    calendar_state.course_survey=0;
 }
 
 static void show_data_summary(void)
