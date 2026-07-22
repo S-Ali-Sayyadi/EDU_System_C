@@ -135,6 +135,11 @@ static int strings_equal_ignore_case(
     const char *second
 );
 
+static int contains_ignore_case(
+    const char *text,
+    const char *key
+);
+
 static int verify_security_answers(
     const char *expected_birth,
     const char *expected_book,
@@ -154,7 +159,16 @@ static int find_request_index(int request_id);
 
 static void print_offering(const Offering *offering, int number);
 static void list_offerings(void);
+static void list_offerings_by_semester(int semester);
 static void list_faculty_offerings(int faculty_index);
+
+static void search_students(void);
+static void search_faculty(void);
+static void search_courses(void);
+static void search_offerings(void);
+
+static void course_catalog_menu(void);
+static void admin_offerings_menu(void);
 
 static void faculty_offer_course_request(int faculty_index);
 
@@ -295,6 +309,54 @@ static int strings_equal_ignore_case(
         index++;
     }
     return first[index]=='\0' && second[index]=='\0';
+}
+
+static int contains_ignore_case(
+    const char *text,
+    const char *key
+)
+{
+    size_t text_length;
+    size_t key_length;
+    size_t start;
+    size_t index;
+
+    if (text==NULL || key==NULL)
+    {
+        return 0;
+    }
+
+    text_length=strlen(text);
+    key_length=strlen(key);
+
+    if (key_length==0)
+    {
+        return 1;
+    }
+
+    if (key_length>text_length)
+    {
+        return 0;
+    }
+
+    for (start=0; start<=text_length-key_length; start++)
+    {
+        for (index=0; index<key_length; index++)
+        {
+            if (
+                tolower((unsigned char)text[start+index]) !=
+                tolower((unsigned char)key[index]))
+            {
+                break;
+            }
+        }
+
+        if (index==key_length)
+        {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static int verify_security_answers(
@@ -1704,12 +1766,459 @@ static void list_offerings(void)
     );
 }
 
+static void list_offerings_by_semester(int semester)
+{
+    int index;
+    int found=0;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Course Offerings in Semester %d\n", semester);
+    printf("----------------------------------------\n");
+
+    if (semester<=0)
+    {
+        printf("Semester number must be greater than zero.\n");
+        return;
+    }
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (offerings[index].semester==semester)
+        {
+            print_offering(&offerings[index],index+1);
+            found=1;
+        }
+    }
+
+    if (!found)
+    {
+        printf("No offerings were found for this semester.\n");
+    }
+}
+
+static void search_students(void)
+{
+    char key[STR_SIZE];
+    int option;
+    int index;
+    int found=0;
+    int matches;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Search Students\n");
+    printf("----------------------------------------\n");
+    printf("1. First name\n");
+    printf("2. Last name\n");
+    printf("3. Student ID\n");
+    printf("4. Field\n");
+    printf("5. Department\n");
+
+    option=read_int("Enter an option: ");
+
+    if (option<1 || option>5)
+    {
+        printf("Invalid search option.\n");
+        return;
+    }
+
+    read_line("Enter search phrase: ",key,sizeof(key));
+
+    if (key[0]=='\0')
+    {
+        printf("Search phrase cannot be empty.\n");
+        return;
+    }
+
+    for (index=0; index<student_count; index++)
+    {
+        matches=0;
+
+        if (option==1)
+        {
+            matches=contains_ignore_case(students[index].first_name,key);
+        }
+        else if (option==2)
+        {
+            matches=contains_ignore_case(students[index].last_name,key);
+        }
+        else if (option==3)
+        {
+            matches=contains_ignore_case(students[index].student_id,key);
+        }
+        else if (option==4)
+        {
+            matches=contains_ignore_case(students[index].field,key);
+        }
+        else if (option==5)
+        {
+            matches=contains_ignore_case(students[index].department,key);
+        }
+
+        if (matches)
+        {
+            printf("\nStudent number %d\n",index+1);
+
+            printf("Name: %s %s\n",students[index].first_name,students[index].last_name);
+
+            printf("Student ID: %s\n",students[index].student_id);
+
+            printf("Field: %s\n",students[index].field);
+
+            printf("Section: %s\n",students[index].section);
+
+            printf("Department: %s\n",students[index].department);
+            found=1;
+        }
+    }
+
+    if (!found)
+    {
+        printf("No matching student was found.\n");
+    }
+}
+
+static void search_faculty(void)
+{
+    char key[STR_SIZE];
+    int option;
+    int index;
+    int found=0;
+    int matches;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Search Faculty Members\n");
+    printf("----------------------------------------\n");
+    printf("1. First name\n");
+    printf("2. Last name\n");
+    printf("3. Faculty ID\n");
+    printf("4. Field\n");
+    printf("5. Department\n");
+
+    option=read_int("Enter an option: ");
+
+    if (option<1 || option>5)
+    {
+        printf("Invalid search option.\n");
+        return;
+    }
+
+    read_line("Enter search phrase: ",key,sizeof(key));
+
+    if (key[0]=='\0')
+    {
+        printf("Search phrase cannot be empty.\n");
+        return;
+    }
+
+    for (index=0; index<faculty_count; index++)
+    {
+        matches=0;
+
+        if (option==1)
+        {
+            matches=contains_ignore_case(faculty_members[index].first_name,key);
+        }
+        else if (option==2)
+        {
+            matches=contains_ignore_case(faculty_members[index].last_name,key);
+        }
+        else if (option==3)
+        {
+            matches=contains_ignore_case(faculty_members[index].faculty_id,key);
+        }
+        else if (option==4)
+        {
+            matches=contains_ignore_case(faculty_members[index].field,key);
+        }
+        else if (option==5)
+        {
+            matches=contains_ignore_case(faculty_members[index].department,key);
+        }
+
+        if (matches)
+        {
+            printf("\nFaculty member number %d\n",index+1);
+
+            printf("Name: %s %s\n",faculty_members[index].first_name,faculty_members[index].last_name);
+
+            printf("Faculty ID: %s\n",faculty_members[index].faculty_id);
+
+            printf("Field: %s\n",faculty_members[index].field);
+
+            printf("Degree: %s\n",faculty_members[index].degree);
+
+            printf("Department: %s\n",faculty_members[index].department);
+            found=1;
+        }
+    }
+
+    if (!found)
+    {
+        printf("No matching faculty member was found.\n");
+    }
+}
+
+static void search_courses(void)
+{
+    char key[STR_SIZE];
+    int option;
+    int index;
+    int found=0;
+    int matches;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Search Courses\n");
+    printf("----------------------------------------\n");
+    printf("1. Course name\n");
+    printf("2. Course ID\n");
+    printf("3. Field\n");
+    printf("4. Department\n");
+
+    option=read_int("Enter an option: ");
+
+    if (option<1 || option>4)
+    {
+        printf("Invalid search option.\n");
+        return;
+    }
+
+    read_line("Enter search phrase: ",key,sizeof(key));
+
+    if (key[0]=='\0')
+    {
+        printf("Search phrase cannot be empty.\n");
+        return;
+    }
+
+    for (index=0; index<course_count; index++)
+    {
+        matches=0;
+
+        if (option==1)
+        {
+            matches=contains_ignore_case(courses[index].name,key);
+        }
+        else if (option==2)
+        {
+            matches=contains_ignore_case(courses[index].course_id,key);
+        }
+        else if (option==3)
+        {
+            matches=contains_ignore_case(courses[index].field,key);
+        }
+        else if (option==4)
+        {
+            matches=contains_ignore_case(courses[index].department,key);
+        }
+
+        if (matches)
+        {
+            printf("\nCourse number %d\n",index+1);
+
+            printf("Course name: %s\n",courses[index].name);
+
+            printf("Course ID: %s\n",courses[index].course_id);
+
+            printf("Units: %d\n",courses[index].units);
+
+            printf("Prerequisites: %s\n",courses[index].prerequisites);
+
+            printf("Section: %s\n",courses[index].section);
+
+            printf("Field: %s\n",courses[index].field);
+
+            printf("Department: %s\n",courses[index].department);
+            found=1;
+        }
+    }
+
+    if (!found)
+    {
+        printf("No matching course was found.\n");
+    }
+}
+
+static void search_offerings(void)
+{
+    char key[STR_SIZE];
+    char faculty_name[STR_SIZE*2+2];
+    int option;
+    int index;
+    int course_index;
+    int faculty_index;
+    int found=0;
+    int matches;
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Search Course Offerings\n");
+    printf("----------------------------------------\n");
+    printf("1. Course name\n");
+    printf("2. Course ID\n");
+    printf("3. Faculty ID or name\n");
+    printf("4. Department\n");
+    printf("5. Place\n");
+
+    option=read_int("Enter an option: ");
+
+    if (option<1 || option>5)
+    {
+        printf("Invalid search option.\n");
+        return;
+    }
+
+    read_line("Enter search phrase: ",key,sizeof(key));
+
+    if (key[0]=='\0')
+    {
+        printf("Search phrase cannot be empty.\n");
+        return;
+    }
+
+    for (index=0; index<offering_count; index++)
+    {
+        matches=0;
+
+        course_index=find_course_index(offerings[index].course_id);
+
+        faculty_index=find_faculty_index(offerings[index].faculty_id);
+
+        faculty_name[0]='\0';
+
+        if (faculty_index!=-1)
+        {
+            snprintf(faculty_name,
+                sizeof(faculty_name),
+                "%s %s",
+                faculty_members[faculty_index].first_name,
+                faculty_members[faculty_index].last_name);
+        }
+
+        if (option==1 && course_index!=-1)
+        {
+            matches=contains_ignore_case(courses[course_index].name,key);
+        }
+        else if (option==2)
+        {
+            matches=contains_ignore_case(offerings[index].course_id,key);
+        }
+        else if (option==3)
+        {
+            matches=contains_ignore_case(offerings[index].faculty_id,key) ||
+                contains_ignore_case(faculty_name,key);
+        }
+        else if (option==4)
+        {
+            matches=contains_ignore_case(offerings[index].department,key);
+        }
+        else if (option==5)
+        {
+            matches=contains_ignore_case(offerings[index].place,key);
+        }
+
+        if (matches)
+        {
+            print_offering(&offerings[index],index+1);
+
+            found=1;
+        }
+    }
+
+    if (!found)
+    {
+        printf("No matching offering was found.\n");
+    }
+}
+
+static void course_catalog_menu(void)
+{
+    int option;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Course Catalog\n");
+        printf("----------------------------------------\n");
+        printf("1. List courses\n");
+        printf("2. Search courses\n");
+        printf("3. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            list_courses();
+        }
+        else if (option==2)
+        {
+            search_courses();
+        }
+        else if (option==3)
+        {
+            return;
+        }
+        else
+        {
+            printf("Invalid option. Please try again.\n");
+        }
+    }
+}
+
+static void admin_offerings_menu(void)
+{
+    int option;
+    int semester;
+
+    while (1)
+    {
+        printf("\n");
+        printf("----------------------------------------\n");
+        printf("Admin: Offering Management\n");
+        printf("----------------------------------------\n");
+        printf("1. List all offerings\n");
+        printf("2. List offerings by semester\n");
+        printf("3. Search offerings\n");
+        printf("4. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            list_offerings();
+        }
+        else if (option==2)
+        {
+            semester=read_int("Enter semester number: ");
+
+            list_offerings_by_semester(semester);
+        }
+        else if (option==3)
+        {
+            search_offerings();
+        }
+        else if (option==4)
+        {
+            return;
+        }
+        else
+        {
+            printf(
+                "Invalid option. Please try again.\n"
+            );
+        }
+    }
+}
+
 static void list_faculty_offerings(int faculty_index)
 {
     int index;
     int found=0;
-    Faculty *faculty=
-        &faculty_members[faculty_index];
+    Faculty *faculty=&faculty_members[faculty_index];
 
     printf("\n");
     printf("----------------------------------------\n");
@@ -1718,15 +2227,9 @@ static void list_faculty_offerings(int faculty_index)
 
     for (index=0; index<offering_count; index++)
     {
-        if (strcmp(
-                offerings[index].faculty_id,
-                faculty->faculty_id
-            )==0)
+        if (strcmp(offerings[index].faculty_id,faculty->faculty_id)==0)
         {
-            print_offering(
-                &offerings[index],
-                index+1
-            );
+            print_offering(&offerings[index],index+1);
 
             found=1;
         }
@@ -1734,9 +2237,7 @@ static void list_faculty_offerings(int faculty_index)
 
     if (!found)
     {
-        printf(
-            "You do not have any approved offerings.\n"
-        );
+        printf("You do not have any approved offerings.\n");
     }
 }
 
@@ -1758,9 +2259,7 @@ static void faculty_offer_course_request(
 
         if (!calendar_state.offering)
        {
-        printf(
-        "Course offering time is disabled.\n"
-        );
+        printf("Course offering time is disabled.\n");
         return;
         }
 
@@ -1777,14 +2276,9 @@ static void faculty_offer_course_request(
 
     list_courses();
 
-    read_line(
-        "Enter course ID: ",
-        course_id,
-        sizeof(course_id)
-    );
+    read_line("Enter course ID: ",course_id,sizeof(course_id));
 
-    course_index=
-        find_course_index(course_id);
+    course_index=find_course_index(course_id);
 
     if (course_index==-1)
     {
@@ -1794,110 +2288,63 @@ static void faculty_offer_course_request(
 
     course=&courses[course_index];
 
-    capacity=
-        read_int("Enter capacity: ");
+    capacity=read_int("Enter capacity: ");
 
     if (capacity<=0)
     {
-        printf(
-            "Capacity must be greater than zero.\n"
-        );
+        printf("Capacity must be greater than zero.\n");
         return;
     }
 
     if (capacity>MAX_ENROLLED)
     {
-        printf(
-            "Capacity cannot be greater than %d.\n",
-            MAX_ENROLLED
-        );
+        printf("Capacity cannot be greater than %d.\n",MAX_ENROLLED);
         return;
     }
 
-    semester=
-        read_int("Enter semester number: ");
+    semester=read_int("Enter semester number: ");
 
     if (semester<=0)
     {
-        printf(
-            "Semester number must be greater than zero.\n"
-        );
+        printf("Semester number must be greater than zero.\n");
         return;
     }
 
-    read_line(
-        "Enter class place: ",
-        place,
-        sizeof(place)
-    );
+    read_line("Enter class place: ",place,sizeof(place));
 
     if (place[0]=='\0')
     {
-        copy_str(
-            place,
-            "TBD",
-            sizeof(place)
-        );
+        copy_str(place,"TBD",sizeof(place));
     }
 
     for (index=0; index<request_count; index++)
     {
-        if (strcmp(
-                requests[index].type,
-                "offer"
-            )==0 &&
-            strcmp(
-                requests[index].course_id,
-                course_id
-            )==0 &&
-            strcmp(
-                requests[index].faculty_id,
-                faculty->faculty_id
-            )==0 &&
+        if (strcmp(requests[index].type,"offer")==0 &&
+            strcmp(requests[index].course_id,course_id)==0 &&
+            strcmp(requests[index].faculty_id,faculty->faculty_id)==0 &&
             requests[index].semester == semester &&
-            strcmp(
-                requests[index].status,
-                "pending"
-            )==0)
+            strcmp(requests[index].status,"pending")==0)
         {
-            printf(
-                "A pending request for this offering "
-                "already exists.\n"
-            );
+            printf("A pending request for this offering ""already exists.\n");
             return;
         }
     }
 
     for (index=0; index<offering_count; index++)
     {
-        if (strcmp(
-                offerings[index].course_id,
-                course_id
-            )==0 &&
-            strcmp(
-                offerings[index].faculty_id,
-                faculty->faculty_id
-            )==0 &&
+        if (strcmp(offerings[index].course_id,course_id)==0 &&
+            strcmp(offerings[index].faculty_id,faculty->faculty_id)==0 &&
             offerings[index].semester==semester)
         {
-            printf(
-                "This course offering already exists.\n"
-            );
-            return;
+            printf("This course offering already exists.\n");return;
         }
     }
 
-    request=
-        &requests[request_count];
+    request=&requests[request_count];
 
-    memset(
-        request,
-        0,
-        sizeof(*request)
-    );
+    memset(request,0,sizeof(*request));
 
-    request->id=
-        next_request_id++;
+    request->id=next_request_id++;
 
     copy_str(
         request->type,
@@ -2542,6 +2989,7 @@ static void student_withdraw_course(int student_index)
 static void student_offerings_menu(int student_index)
 {
     int option;
+    int semester;
 
     while (1)
     {
@@ -2550,10 +2998,12 @@ static void student_offerings_menu(int student_index)
         printf("Student: Course Enrollment\n");
         printf("----------------------------------------\n");
         printf("1. List all offerings\n");
-        printf("2. Enroll in an offering\n");
-        printf("3. List my enrolled courses\n");
-        printf("4. Withdraw from an offering\n");
-        printf("5. Go back\n");
+        printf("2. List offerings by semester\n");
+        printf("3. Search offerings\n");
+        printf("4. Enroll in an offering\n");
+        printf("5. List my enrolled courses\n");
+        printf("6. Withdraw from an offering\n");
+        printf("7. Go back\n");
 
         option=read_int("Enter an option: ");
 
@@ -2563,17 +3013,28 @@ static void student_offerings_menu(int student_index)
         }
         else if (option==2)
         {
-            student_enroll_course(student_index);
+            semester=
+                read_int("Enter semester number: ");
+
+            list_offerings_by_semester(semester);
         }
         else if (option==3)
         {
-            list_student_enrollments(student_index);
+            search_offerings();
         }
         else if (option==4)
         {
-            student_withdraw_course(student_index);
+            student_enroll_course(student_index);
         }
         else if (option==5)
+        {
+            list_student_enrollments(student_index);
+        }
+        else if (option==6)
+        {
+            student_withdraw_course(student_index);
+        }
+        else if (option==7)
         {
             return;
         }
@@ -2843,7 +3304,7 @@ static void student_dashboard(int student_index)
         }
         else if (option==2)
         {
-              list_courses();
+            course_catalog_menu();
         }
         else if (option==3)
         {
@@ -3202,11 +3663,16 @@ static void faculty_dashboard(int faculty_index)
         }
         else if (option==2)
         {
-            printf("Semester offerings will be added later.\n");
+            int semester;
+
+            semester=
+                read_int("Enter semester number: ");
+
+            list_offerings_by_semester(semester);
         }
         else if (option==3)
         {
-             list_courses();
+            course_catalog_menu();
         }
         else if (option==4)
         {
@@ -3510,9 +3976,10 @@ static void admin_students_menu(void)
         printf("Admin: Student Management\n");
         printf("----------------------------------------\n");
         printf("1. List students\n");
-        printf("2. Register a student\n");
-	printf("3. Delete a student\n");
-        printf("4. Go back\n");
+        printf("2. Search students\n");
+        printf("3. Register a student\n");
+        printf("4. Delete a student\n");
+        printf("5. Go back\n");
 
         option=read_int("Enter an option: ");
 
@@ -3522,19 +3989,25 @@ static void admin_students_menu(void)
         }
         else if (option==2)
         {
-            register_student();
+            search_students();
         }
         else if (option==3)
         {
+            register_student();
+        }
+        else if (option==4)
+        {
             delete_student();
         }
-	else if (option==4)
-	{
-    	    return;
-	}
+        else if (option==5)
+        {
+            return;
+        }
         else
         {
-            printf("Invalid option. Please try again.\n");
+            printf(
+                "Invalid option. Please try again.\n"
+            );
         }
     }
 }
@@ -3829,10 +4302,12 @@ static void admin_faculty_menu(void)
         printf("----------------------------------------\n");
         printf("Admin: Faculty Management\n");
         printf("----------------------------------------\n");
-	printf("1. List faculty members\n");
-	printf("2. Register a faculty member\n");
-	printf("3. Delete a faculty member\n");
-	printf("4. Go back\n");
+        printf("1. List faculty members\n");
+        printf("2. Search faculty members\n");
+        printf("3. Register a faculty member\n");
+        printf("4. Delete a faculty member\n");
+        printf("5. Go back\n");
+
         option=read_int("Enter an option: ");
 
         if (option==1)
@@ -3841,19 +4316,25 @@ static void admin_faculty_menu(void)
         }
         else if (option==2)
         {
-            register_faculty();
+            search_faculty();
         }
         else if (option==3)
         {
-            delete_faculty(); 
+            register_faculty();
         }
-	else if (option==4)
-	{
-  	    return;
-	}
+        else if (option==4)
+        {
+            delete_faculty();
+        }
+        else if (option==5)
+        {
+            return;
+        }
         else
         {
-            printf("Invalid option. Please try again.\n");
+            printf(
+                "Invalid option. Please try again.\n"
+            );
         }
     }
 }
@@ -4110,9 +4591,10 @@ static void admin_courses_menu(void)
         printf("Admin: Course Management\n");
         printf("----------------------------------------\n");
         printf("1. List courses\n");
-        printf("2. Register a course\n");
-        printf("3. Delete a course\n");
-        printf("4. Go back\n");
+        printf("2. Search courses\n");
+        printf("3. Register a course\n");
+        printf("4. Delete a course\n");
+        printf("5. Go back\n");
 
         option=read_int("Enter an option: ");
 
@@ -4122,19 +4604,25 @@ static void admin_courses_menu(void)
         }
         else if (option==2)
         {
-            register_course();
+            search_courses();
         }
         else if (option==3)
         {
-            delete_course();
+            register_course();
         }
         else if (option==4)
+        {
+            delete_course();
+        }
+        else if (option==5)
         {
             return;
         }
         else
         {
-            printf("Invalid option. Please try again.\n");
+            printf(
+                "Invalid option. Please try again.\n"
+            );
         }
     }
 }
@@ -4310,7 +4798,7 @@ static void admin_dashboard(void)
         }
         else if (option==5)
         {
-            list_offerings();
+            admin_offerings_menu();
         }
         else if (option==6)
         {
