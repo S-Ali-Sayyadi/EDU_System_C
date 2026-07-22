@@ -96,13 +96,20 @@ typedef struct
     char status[SMALL_SIZE];
 } Request;
 
+typedef enum
+{
+    PHASE_NOT_STARTED=0,
+    PHASE_ACTIVE=1,
+    PHASE_FINISHED=2
+} PhaseState;
+
 typedef struct
 {
-    int offering;
-    int unit_selection;
-    int classes_exams;
-    int grade_recording;
-    int course_survey;
+    int current_semester;
+    PhaseState offering;
+    PhaseState unit_selection;
+    PhaseState classes_exams;
+    PhaseState grade_recording;
 } CalendarState;
 
 static void json_write_string(FILE *file,const char *text);
@@ -121,7 +128,13 @@ static Course courses[MAX_COURSES];
 static Offering offerings[MAX_OFFERINGS];
 static Request requests[MAX_REQUESTS];
 
-static CalendarState calendar_state={0, 0, 0, 0, 0};
+static CalendarState calendar_state={
+    14042,
+    PHASE_NOT_STARTED,
+    PHASE_NOT_STARTED,
+    PHASE_NOT_STARTED,
+    PHASE_NOT_STARTED
+};
 
 static int student_count = 0;
 static int faculty_count = 0;
@@ -211,8 +224,20 @@ static void approve_request(void);
 static void reject_request(void);
 static void admin_requests_menu(void);
 
-static const char *calendar_status(int enabled);
+static const char *phase_status(PhaseState state);
+
+static int transition_calendar_phase(
+    PhaseState *phase,
+    int can_start,
+    int can_finish,
+    const char *phase_name,
+    const char *start_error,
+    const char *finish_error
+);
+
+static void start_next_semester(void);
 static void admin_calendar_menu(void);
+
 static void student_course_survey(int student_index);
 
 static int course_is_in_use(const char *course_id);
@@ -988,16 +1013,16 @@ static int save_all(void)
     fprintf(
         file,
         "\"record\":\"calendar\","
+        "\"current_semester\":%d,"
         "\"offering\":%d,"
         "\"unit_selection\":%d,"
         "\"classes_exams\":%d,"
-        "\"grade_recording\":%d,"
-        "\"course_survey\":%d}",
-        calendar_state.offering,
-        calendar_state.unit_selection,
-        calendar_state.classes_exams,
-        calendar_state.grade_recording,
-        calendar_state.course_survey
+        "\"grade_recording\":%d}",
+        calendar_state.current_semester,
+        (int)calendar_state.offering,
+        (int)calendar_state.unit_selection,
+        (int)calendar_state.classes_exams,
+        (int)calendar_state.grade_recording
     );
 
     for (index=0; index<student_count; index++)
@@ -1445,6 +1470,8 @@ static int load_all(void)
     memset(requests, 0, sizeof(requests));
     memset(&calendar_state,0,sizeof(calendar_state));
 
+    calendar_state.current_semester=14042;
+
     student_count=0;
     faculty_count=0;
     course_count=0;
@@ -1470,17 +1497,79 @@ static int load_all(void)
 
         if (strcmp(record_type, "calendar")==0)
         {
-            if (next_json_int(&cursor, &calendar_state.offering) &&
-                next_json_int(&cursor,&calendar_state.unit_selection) &&
-                next_json_int(&cursor,&calendar_state.classes_exams) &&
-                next_json_int(&cursor,&calendar_state.grade_recording) &&
-                next_json_int(&cursor,&calendar_state.course_survey))
+            int current_semester;
+            int offering_state;
+            int unit_selection_state;
+            int classes_exams_state;
+            int grade_recording_state;
+
+            if (strstr(line, "\"current_semester\"")!=NULL)
             {
-                loaded_any=1;
+                if (next_json_int(&cursor,&current_semester) &&
+                    next_json_int(&cursor,&offering_state) &&
+                    next_json_int(&cursor,&unit_selection_state) &&
+                    next_json_int(&cursor,&classes_exams_state) &&
+                    next_json_int(&cursor,&grade_recording_state) &&
+                    current_semester>0 &&
+                    offering_state>=PHASE_NOT_STARTED &&
+                    offering_state<=PHASE_FINISHED &&
+                    unit_selection_state>=PHASE_NOT_STARTED &&
+                    unit_selection_state<=PHASE_FINISHED &&
+                    classes_exams_state>=PHASE_NOT_STARTED &&
+                    classes_exams_state<=PHASE_FINISHED &&
+                    grade_recording_state>=PHASE_NOT_STARTED &&
+                    grade_recording_state<=PHASE_FINISHED)
+                {
+                    calendar_state.current_semester=
+                        current_semester;
+
+                    calendar_state.offering=
+                        (PhaseState)offering_state;
+
+                    calendar_state.unit_selection=
+                        (PhaseState)unit_selection_state;
+
+                    calendar_state.classes_exams=
+                        (PhaseState)classes_exams_state;
+
+                    calendar_state.grade_recording=
+                        (PhaseState)grade_recording_state;
+
+                    loaded_any=1;
+                }
+                else
+                {
+                    invalid_lines++;
+                }
             }
             else
             {
-                invalid_lines++;
+                int old_course_survey;
+
+                if (next_json_int(&cursor,&offering_state) &&
+                next_json_int(&cursor,&unit_selection_state) &&
+                next_json_int(&cursor,&classes_exams_state) &&
+                next_json_int(&cursor,&grade_recording_state) &&
+                next_json_int(&cursor,&old_course_survey))
+                {
+                    (void)old_course_survey;
+
+                    calendar_state.current_semester=14042;
+
+                    calendar_state.offering=offering_state? PHASE_ACTIVE: PHASE_NOT_STARTED;
+
+                    calendar_state.unit_selection=unit_selection_state? PHASE_ACTIVE: PHASE_NOT_STARTED;
+
+                    calendar_state.classes_exams=classes_exams_state? PHASE_ACTIVE: PHASE_NOT_STARTED;
+
+                    calendar_state.grade_recording=grade_recording_state? PHASE_ACTIVE: PHASE_NOT_STARTED;
+
+                    loaded_any=1;
+                }
+                else
+                {
+                    invalid_lines++;
+                }
             }
         }
         else if (strcmp(record_type, "student")==0 && student_count < MAX_STUDENTS)
@@ -2496,11 +2585,11 @@ static void initialize_sample_data(void)
         -1.00
     );
 
-    calendar_state.offering=0;
-    calendar_state.unit_selection=0;
-    calendar_state.classes_exams=0;
-    calendar_state.grade_recording=0;
-    calendar_state.course_survey=0;
+    calendar_state.current_semester=14042;
+    calendar_state.offering=PHASE_NOT_STARTED;
+    calendar_state.unit_selection=PHASE_NOT_STARTED;
+    calendar_state.classes_exams=PHASE_NOT_STARTED;
+    calendar_state.grade_recording=PHASE_NOT_STARTED;
 }
 
 static void show_data_summary(void)
@@ -3354,11 +3443,11 @@ static void faculty_offer_course_request(
 
     faculty=&faculty_members[faculty_index];
 
-        if (!calendar_state.offering)
-       {
-        printf("Course offering time is disabled.\n");
+    if (calendar_state.offering!=PHASE_ACTIVE)
+    {
+        printf("Course offering time is not active.\n");
         return;
-        }
+    }
 
     if (request_count>=MAX_REQUESTS)
     {
@@ -3656,12 +3745,11 @@ static void faculty_request_removal(
         return;
     }
 
-    if (!calendar_state.offering)
+    if (calendar_state.offering!=PHASE_ACTIVE)
     {
         printf(
-            "Removing an offering is allowed only while "
-            "the offering period is enabled.\n"
-        );
+    "Removing an offering is allowed only while "
+             "the offering period is active.\n");
         return;
     }
 
@@ -4225,12 +4313,9 @@ static void student_enroll_course(int student_index)
 
     student=&students[student_index];
 
-        if (!calendar_state.unit_selection)
+    if (calendar_state.unit_selection!=PHASE_ACTIVE)
         {
-         printf(
-        "Unit selection is disabled. "
-        "You cannot enroll now.\n"
-        );
+        printf("Unit selection is not active. ""You cannot enroll now.\n");
         return;
         }
 
@@ -4344,12 +4429,9 @@ static void student_withdraw_course(int student_index)
 
     student=&students[student_index];
 
-        if (!calendar_state.unit_selection)
+    if (calendar_state.unit_selection!=PHASE_ACTIVE)
         {
-        printf(
-        "Unit selection is disabled. "
-        "You cannot withdraw now.\n"
-        );
+        printf("Unit selection is not active. ""You cannot withdraw now.\n");
         return;
         }
  
@@ -4505,12 +4587,6 @@ static void student_course_survey(int student_index)
     int found=0;
 
     student=&students[student_index];
-
-    if (!calendar_state.course_survey)
-    {
-        printf("Course survey time is disabled.\n");
-        return;
-    }
 
     printf("\n");
     printf("----------------------------------------\n");
@@ -4853,10 +4929,10 @@ static void faculty_record_grade_for_offering(
     int enrollment_index;
     double grade;
 
-    if (!calendar_state.grade_recording)
+    if (calendar_state.grade_recording!=PHASE_ACTIVE)
     {
         printf(
-            "Grade recording time is disabled.\n"
+        "Grade recording time is not active.\n"
         );
         return;
     }
@@ -5108,10 +5184,10 @@ static void faculty_record_grades(
     Offering *offering;
     int option;
 
-    if (!calendar_state.grade_recording)
+    if (calendar_state.grade_recording!=PHASE_ACTIVE)
     {
         printf(
-            "Grade recording time is disabled.\n"
+            "Grade recording time is not active.\n"
         );
         return;
     }
@@ -7459,19 +7535,133 @@ static void admin_courses_menu(void)
     }
 }
 
-static const char *calendar_status(int enabled)
+static const char *phase_status(PhaseState state)
 {
-    if (enabled)
+    if (state==PHASE_NOT_STARTED)
     {
-        return "enabled";
+        return "not started";
     }
 
-    return "disabled";
+    if (state==PHASE_ACTIVE)
+    {
+        return "active";
+    }
+
+    return "finished";
+}
+
+static int transition_calendar_phase(
+    PhaseState *phase,
+    int can_start,
+    int can_finish,
+    const char *phase_name,
+    const char *start_error,
+    const char *finish_error
+)
+{
+    if (*phase==PHASE_NOT_STARTED)
+    {
+        if (!can_start)
+        {
+            printf("%s\n", start_error);
+            return 0;
+        }
+
+        *phase=PHASE_ACTIVE;
+
+        printf(
+            "%s started successfully.\n",
+            phase_name
+        );
+
+        return 1;
+    }
+
+    if (*phase==PHASE_ACTIVE)
+    {
+        if (!can_finish)
+        {
+            printf("%s\n", finish_error);
+            return 0;
+        }
+
+        *phase=PHASE_FINISHED;
+
+        printf(
+            "%s finished successfully.\n",
+            phase_name
+        );
+
+        return 1;
+    }
+
+    printf(
+        "%s has already finished for semester %d.\n",
+        phase_name,
+        calendar_state.current_semester
+    );
+
+    return 0;
+}
+
+static void start_next_semester(void)
+{
+    int next_semester;
+
+    if (calendar_state.grade_recording!=
+        PHASE_FINISHED)
+    {
+        printf(
+            "The current semester cannot be closed "
+            "before grade recording is finished.\n"
+        );
+
+        return;
+    }
+
+    next_semester=read_int(
+        "Enter the next semester number: "
+    );
+
+    if (next_semester<=
+        calendar_state.current_semester)
+    {
+        printf(
+            "The next semester number must be "
+            "greater than %d.\n",
+            calendar_state.current_semester
+        );
+
+        return;
+    }
+
+    calendar_state.current_semester=
+        next_semester;
+
+    calendar_state.offering=
+        PHASE_NOT_STARTED;
+
+    calendar_state.unit_selection=
+        PHASE_NOT_STARTED;
+
+    calendar_state.classes_exams=
+        PHASE_NOT_STARTED;
+
+    calendar_state.grade_recording=
+        PHASE_NOT_STARTED;
+
+    save_all();
+
+    printf(
+        "Semester %d initialized successfully.\n",
+        calendar_state.current_semester
+    );
 }
 
 static void admin_calendar_menu(void)
 {
     int option;
+    int changed;
 
     while (1)
     {
@@ -7481,101 +7671,103 @@ static void admin_calendar_menu(void)
         printf("----------------------------------------\n");
 
         printf(
+            "Current semester: %d\n",
+            calendar_state.current_semester
+        );
+
+        printf(
             "1. Course offering: %s\n",
-            calendar_status(calendar_state.offering)
+            phase_status(
+                calendar_state.offering
+            )
         );
 
         printf(
             "2. Unit selection: %s\n",
-            calendar_status(calendar_state.unit_selection)
+            phase_status(
+                calendar_state.unit_selection
+            )
         );
 
         printf(
             "3. Classes and exams: %s\n",
-            calendar_status(calendar_state.classes_exams)
+            phase_status(
+                calendar_state.classes_exams
+            )
         );
 
         printf(
             "4. Grade recording: %s\n",
-            calendar_status(calendar_state.grade_recording)
+            phase_status(
+                calendar_state.grade_recording
+            )
         );
 
-        printf(
-            "5. Course survey: %s\n",
-            calendar_status(calendar_state.course_survey)
-        );
-
+        printf("5. Start next semester\n");
         printf("6. Go back\n");
 
-        option=read_int("Enter an option to toggle: ");
+        option=read_int("Enter an option: ");
+        changed=0;
 
         if (option==1)
         {
-            calendar_state.offering=
-                !calendar_state.offering;
-
-            save_all();
-
-            printf(
-                "Course offering is now %s.\n",
-                calendar_status(calendar_state.offering)
+            changed=transition_calendar_phase(
+                &calendar_state.offering,
+                1,
+                1,
+                "Course offering",
+                "Course offering cannot start now.",
+                "Course offering cannot finish now."
             );
         }
         else if (option==2)
         {
-            calendar_state.unit_selection=
-                !calendar_state.unit_selection;
-
-            save_all();
-
-            printf(
-                "Unit selection is now %s.\n",
-                calendar_status(
-                    calendar_state.unit_selection
-                )
+            changed=transition_calendar_phase(
+                &calendar_state.unit_selection,
+                calendar_state.offering!=
+                    PHASE_NOT_STARTED,
+                calendar_state.offering==
+                    PHASE_FINISHED,
+                "Unit selection",
+                "Unit selection cannot start before "
+                "course offering starts.",
+                "Unit selection cannot finish before "
+                "course offering finishes."
             );
         }
         else if (option==3)
         {
-            calendar_state.classes_exams=
-                !calendar_state.classes_exams;
-
-            save_all();
-
-            printf(
-                "Classes and exams are now %s.\n",
-                calendar_status(
-                    calendar_state.classes_exams
-                )
+            changed=transition_calendar_phase(
+                &calendar_state.classes_exams,
+                calendar_state.unit_selection!=
+                    PHASE_NOT_STARTED,
+                calendar_state.unit_selection==
+                    PHASE_FINISHED,
+                "Classes and exams",
+                "Classes and exams cannot start before "
+                "unit selection starts.",
+                "Classes and exams cannot finish before "
+                "unit selection finishes."
             );
         }
         else if (option==4)
         {
-            calendar_state.grade_recording=
-                !calendar_state.grade_recording;
-
-            save_all();
-
-            printf(
-                "Grade recording is now %s.\n",
-                calendar_status(
-                    calendar_state.grade_recording
-                )
+            changed=transition_calendar_phase(
+                &calendar_state.grade_recording,
+                calendar_state.classes_exams!=
+                    PHASE_NOT_STARTED,
+                calendar_state.classes_exams==
+                    PHASE_FINISHED,
+                "Grade recording",
+                "Grade recording cannot start before "
+                "classes and exams start.",
+                "Grade recording cannot finish before "
+                "classes and exams finish."
             );
         }
         else if (option==5)
         {
-            calendar_state.course_survey=
-                !calendar_state.course_survey;
-
-            save_all();
-
-            printf(
-                "Course survey is now %s.\n",
-                calendar_status(
-                    calendar_state.course_survey
-                )
-            );
+            start_next_semester();
         }
         else if (option==6)
         {
@@ -7586,6 +7778,11 @@ static void admin_calendar_menu(void)
             printf(
                 "Invalid option. Please try again.\n"
             );
+        }
+
+        if (changed)
+        {
+            save_all();
         }
     }
 }
