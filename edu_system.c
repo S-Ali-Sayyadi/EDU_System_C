@@ -215,11 +215,13 @@ static void show_data_summary(void);
 
 static void list_students(void);
 static void register_student(void);
+static void import_students_file(void);
 static void delete_student(void);
 static void admin_students_menu(void);
 
 static void list_faculty(void);
 static void register_faculty(void);
+static void import_faculty_file(void);
 static void delete_faculty(void);
 static void admin_faculty_menu(void);
 
@@ -259,6 +261,7 @@ static void faculty_dashboard(int faculty_index);
 static void admin_dashboard(void);
 
 static void trim(char *text);
+static char *next_token(char **cursor);
 static void read_line(const char *prompt, char *output, size_t size);
 static int read_int(const char *prompt);
 static double read_double(const char *prompt)
@@ -5104,6 +5107,228 @@ static void register_student(void)
     printf("Student ID: %s\n", student->student_id);
 }
 
+static void import_students_file(void)
+{
+    char path[STR_SIZE];
+    char line[LINE_SIZE];
+    FILE *file;
+
+    int imported=0;
+    int duplicate_count=0;
+    int invalid_count=0;
+
+    read_line(
+        "Enter file path to import students: ",
+        path,
+        sizeof(path)
+    );
+
+    file=fopen(path, "r");
+
+    if (file==NULL)
+    {
+        printf("Could not open the import file.\n");
+        return;
+    }
+
+    while (
+        fgets(line, sizeof(line), file)!=NULL &&
+        student_count<MAX_STUDENTS
+    )
+    {
+        Student student;
+        char *cursor;
+        char *fields[13];
+        char extra[2];
+
+        int field_index;
+        int entrance_year;
+
+        line[strcspn(line, "\r\n")]='\0';
+        trim(line);
+
+        if (line[0]=='\0')
+        {
+            continue;
+        }
+
+        cursor=line;
+
+        for (field_index=0; field_index<13; field_index++)
+        {
+            fields[field_index]=next_token(&cursor);
+
+            if (fields[field_index]==NULL)
+            {
+                break;
+            }
+        }
+
+        if (field_index<12)
+        {
+            invalid_count++;
+            continue;
+        }
+
+        if (fields[2][0]=='\0')
+        {
+            invalid_count++;
+            continue;
+        }
+
+        if (
+            sscanf(
+                fields[5],
+                "%d %1s",
+                &entrance_year,
+                extra
+            )!=1
+        )
+        {
+            invalid_count++;
+            continue;
+        }
+
+        if (find_student_index(fields[2])!=-1)
+        {
+            duplicate_count++;
+            continue;
+        }
+
+        memset(
+            &student,
+            0,
+            sizeof(student)
+        );
+
+        copy_str(
+            student.first_name,
+            fields[0],
+            sizeof(student.first_name)
+        );
+
+        copy_str(
+            student.last_name,
+            fields[1],
+            sizeof(student.last_name)
+        );
+
+        copy_str(
+            student.student_id,
+            fields[2],
+            sizeof(student.student_id)
+        );
+
+        copy_str(
+            student.national_code,
+            fields[3],
+            sizeof(student.national_code)
+        );
+
+        copy_str(
+            student.field,
+            fields[4],
+            sizeof(student.field)
+        );
+
+        student.entrance_year=entrance_year;
+
+        copy_str(
+            student.section,
+            fields[6],
+            sizeof(student.section)
+        );
+
+        copy_str(
+            student.mentor,
+            fields[7],
+            sizeof(student.mentor)
+        );
+
+        copy_str(
+            student.department,
+            fields[8],
+            sizeof(student.department)
+        );
+
+        copy_str(
+            student.answer_birth,
+            fields[9],
+            sizeof(student.answer_birth)
+        );
+
+        copy_str(
+            student.answer_book,
+            fields[10],
+            sizeof(student.answer_book)
+        );
+
+        copy_str(
+            student.answer_bike,
+            fields[11],
+            sizeof(student.answer_bike)
+        );
+
+        if (
+            field_index>=13 &&
+            fields[12]!=NULL &&
+            fields[12][0]!='\0'
+        )
+        {
+            copy_str(
+                student.password,
+                fields[12],
+                sizeof(student.password)
+            );
+        }
+        else
+        {
+            copy_str(
+                student.password,
+                "123456",
+                sizeof(student.password)
+            );
+        }
+
+        students[student_count]=student;
+        student_count++;
+        imported++;
+    }
+
+    fclose(file);
+
+    if (imported>0)
+    {
+        save_all();
+    }
+
+    printf(
+        "Imported %d student(s).\n",
+        imported
+    );
+
+    if (duplicate_count>0)
+    {
+        printf(
+            "Skipped duplicate student IDs: %d\n",
+            duplicate_count
+        );
+    }
+
+    if (invalid_count>0)
+    {
+        printf(
+            "Skipped invalid lines: %d\n",
+            invalid_count
+        );
+    }
+
+    if (student_count>=MAX_STUDENTS)
+    {
+        printf("Student storage is full.\n");
+    }
+}
+
 static void delete_student(void)
 {
     char student_id[SMALL_SIZE];
@@ -5199,11 +5424,13 @@ static void admin_students_menu(void)
         printf("----------------------------------------\n");
         printf("Admin: Student Management\n");
         printf("----------------------------------------\n");
+
         printf("1. List students\n");
         printf("2. Search students\n");
-        printf("3. Register a student\n");
-        printf("4. Delete a student\n");
-        printf("5. Go back\n");
+        printf("3. Register one student\n");
+        printf("4. Import a group of students\n");
+        printf("5. Delete a student\n");
+        printf("6. Go back\n");
 
         option=read_int("Enter an option: ");
 
@@ -5221,9 +5448,13 @@ static void admin_students_menu(void)
         }
         else if (option==4)
         {
-            delete_student();
+            import_students_file();
         }
         else if (option==5)
+        {
+            delete_student();
+        }
+        else if (option==6)
         {
             return;
         }
@@ -5419,6 +5650,267 @@ static void register_faculty(void)
     printf("Faculty ID: %s\n", faculty->faculty_id);
 }
 
+static void import_faculty_file(void)
+{
+    char path[STR_SIZE];
+    char line[LINE_SIZE];
+    FILE *file;
+
+    int imported=0;
+    int duplicate_count=0;
+    int invalid_count=0;
+
+    read_line(
+        "Enter file path to import faculty members: ",
+        path,
+        sizeof(path)
+    );
+
+    file=fopen(path, "r");
+
+    if (file==NULL)
+    {
+        printf("Could not open the import file.\n");
+        return;
+    }
+
+    while (
+        fgets(line, sizeof(line), file)!=NULL &&
+        faculty_count<MAX_FACULTY
+    )
+    {
+        Faculty faculty;
+        char *cursor;
+        char *fields[12];
+        char extra[2];
+
+        int field_index;
+        int entrance_year;
+
+        line[strcspn(line, "\r\n")]='\0';
+        trim(line);
+
+        if (line[0]=='\0')
+        {
+            continue;
+        }
+
+        cursor=line;
+
+        for (field_index=0; field_index<12; field_index++)
+        {
+            fields[field_index]=next_token(&cursor);
+
+            if (fields[field_index]==NULL)
+            {
+                break;
+            }
+        }
+
+        if (field_index<8)
+        {
+            invalid_count++;
+            continue;
+        }
+
+        if (fields[2][0]=='\0')
+        {
+            invalid_count++;
+            continue;
+        }
+
+        if (
+            sscanf(
+                fields[5],
+                "%d %1s",
+                &entrance_year,
+                extra
+            )!=1
+        )
+        {
+            invalid_count++;
+            continue;
+        }
+
+        if (find_faculty_index(fields[2])!=-1)
+        {
+            duplicate_count++;
+            continue;
+        }
+
+        memset(
+            &faculty,
+            0,
+            sizeof(faculty)
+        );
+
+        copy_str(
+            faculty.first_name,
+            fields[0],
+            sizeof(faculty.first_name)
+        );
+
+        copy_str(
+            faculty.last_name,
+            fields[1],
+            sizeof(faculty.last_name)
+        );
+
+        copy_str(
+            faculty.faculty_id,
+            fields[2],
+            sizeof(faculty.faculty_id)
+        );
+
+        copy_str(
+            faculty.national_code,
+            fields[3],
+            sizeof(faculty.national_code)
+        );
+
+        copy_str(
+            faculty.field,
+            fields[4],
+            sizeof(faculty.field)
+        );
+
+        faculty.entrance_year=entrance_year;
+
+        copy_str(
+            faculty.degree,
+            fields[6],
+            sizeof(faculty.degree)
+        );
+
+        copy_str(
+            faculty.department,
+            fields[7],
+            sizeof(faculty.department)
+        );
+
+        if (
+            field_index>=9 &&
+            fields[8]!=NULL &&
+            fields[8][0]!='\0'
+        )
+        {
+            copy_str(
+                faculty.password,
+                fields[8],
+                sizeof(faculty.password)
+            );
+        }
+        else
+        {
+            copy_str(
+                faculty.password,
+                "123456",
+                sizeof(faculty.password)
+            );
+        }
+
+        if (
+            field_index>=10 &&
+            fields[9]!=NULL &&
+            fields[9][0]!='\0'
+        )
+        {
+            copy_str(
+                faculty.answer_birth,
+                fields[9],
+                sizeof(faculty.answer_birth)
+            );
+        }
+        else
+        {
+            copy_str(
+                faculty.answer_birth,
+                "Tehran",
+                sizeof(faculty.answer_birth)
+            );
+        }
+
+        if (
+            field_index>=11 &&
+            fields[10]!=NULL &&
+            fields[10][0]!='\0'
+        )
+        {
+            copy_str(
+                faculty.answer_book,
+                fields[10],
+                sizeof(faculty.answer_book)
+            );
+        }
+        else
+        {
+            copy_str(
+                faculty.answer_book,
+                "1984",
+                sizeof(faculty.answer_book)
+            );
+        }
+
+        if (
+            field_index>=12 &&
+            fields[11]!=NULL &&
+            fields[11][0]!='\0'
+        )
+        {
+            copy_str(
+                faculty.answer_bike,
+                fields[11],
+                sizeof(faculty.answer_bike)
+            );
+        }
+        else
+        {
+            copy_str(
+                faculty.answer_bike,
+                "Blue",
+                sizeof(faculty.answer_bike)
+            );
+        }
+
+        faculty_members[faculty_count]=faculty;
+        faculty_count++;
+        imported++;
+    }
+
+    fclose(file);
+
+    if (imported>0)
+    {
+        save_all();
+    }
+
+    printf(
+        "Imported %d faculty member(s).\n",
+        imported
+    );
+
+    if (duplicate_count>0)
+    {
+        printf(
+            "Skipped duplicate faculty IDs: %d\n",
+            duplicate_count
+        );
+    }
+
+    if (invalid_count>0)
+    {
+        printf(
+            "Skipped invalid lines: %d\n",
+            invalid_count
+        );
+    }
+
+    if (faculty_count>=MAX_FACULTY)
+    {
+        printf("Faculty storage is full.\n");
+    }
+}
+
 static void delete_faculty(void)
 {
     char faculty_id[SMALL_SIZE];
@@ -5526,11 +6018,13 @@ static void admin_faculty_menu(void)
         printf("----------------------------------------\n");
         printf("Admin: Faculty Management\n");
         printf("----------------------------------------\n");
+
         printf("1. List faculty members\n");
         printf("2. Search faculty members\n");
-        printf("3. Register a faculty member\n");
-        printf("4. Delete a faculty member\n");
-        printf("5. Go back\n");
+        printf("3. Register one faculty member\n");
+        printf("4. Import a group of faculty members\n");
+        printf("5. Delete a faculty member\n");
+        printf("6. Go back\n");
 
         option=read_int("Enter an option: ");
 
@@ -5548,9 +6042,13 @@ static void admin_faculty_menu(void)
         }
         else if (option==4)
         {
-            delete_faculty();
+            import_faculty_file();
         }
         else if (option==5)
+        {
+            delete_faculty();
+        }
+        else if (option==6)
         {
             return;
         }
@@ -6243,6 +6741,34 @@ static void trim(char *text)
         text[length-1]='\0';
         length--;
     }
+}
+
+static char *next_token(char **cursor)
+{
+    char *start;
+    char *separator;
+
+    if (cursor==NULL || *cursor==NULL)
+    {
+        return NULL;
+    }
+
+    start=*cursor;
+    separator=strchr(start, '|');
+
+    if (separator!=NULL)
+    {
+        *separator='\0';
+        *cursor=separator+1;
+    }
+    else
+    {
+        *cursor=NULL;
+    }
+
+    trim(start);
+
+    return start;
 }
 
 static void read_line(const char *prompt,char *output,size_t size)
