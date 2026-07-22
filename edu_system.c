@@ -158,7 +158,6 @@ static int find_course_index(const char *course_id);
 static int find_request_index(int request_id);
 
 static void print_offering(const Offering *offering, int number);
-static void list_offerings(void);
 static void list_offerings_by_semester(int semester);
 static void list_faculty_offerings(int faculty_index);
 
@@ -309,7 +308,6 @@ static int prerequisites_satisfied(
     const Course *course
 );
 
-static void list_student_enrollments(int student_index);
 static void student_enroll_course(int student_index);
 static void student_withdraw_course(int student_index);
 static void student_offerings_menu(int student_index);
@@ -2592,35 +2590,6 @@ static void print_offering(
     );
 }
 
-static void list_offerings(void)
-{
-    int index;
-
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Course Offerings\n");
-    printf("----------------------------------------\n");
-
-    if (offering_count==0)
-    {
-        printf("No course offerings are available.\n");
-        return;
-    }
-
-    for (index=0; index<offering_count; index++)
-    {
-        print_offering(
-            &offerings[index],
-            index+1
-        );
-    }
-
-    printf(
-        "\nTotal offerings: %d\n",
-        offering_count
-    );
-}
-
 static void list_offerings_by_semester(int semester)
 {
     int index;
@@ -3307,7 +3276,7 @@ static void admin_offerings_menu(void)
             printf(
                 "4. Add capacity to an offering\n"
             );
-            printf("5. Choose another semester\n");
+            printf("5. Go back\n");
 
             option=read_int("Enter an option: ");
 
@@ -4244,66 +4213,6 @@ static void admin_requests_menu(void)
     }
 }
 
-static void list_student_enrollments(int student_index)
-{
-    Student *student;
-    int offering_index;
-    int enrollment_index;
-    int found=0;
-
-    student=&students[student_index];
-
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("My Enrolled Courses\n");
-    printf("----------------------------------------\n");
-
-    for (
-        offering_index=0;
-        offering_index<offering_count;
-        offering_index++
-    )
-    {
-        enrollment_index=offering_has_student(
-            offering_index,
-            student->student_id
-        );
-
-        if (enrollment_index!=-1)
-        {
-            Enrollment *enrollment=
-                &offerings[offering_index]
-                    .enrollments[enrollment_index];
-
-            print_offering(
-                &offerings[offering_index],
-                offering_index+1
-            );
-
-            if (enrollment->grade<0)
-            {
-                printf("Grade: Not recorded\n");
-            }
-            else
-            {
-                printf(
-                    "Grade: %.2f\n",
-                    enrollment->grade
-                );
-            }
-
-            found=1;
-        }
-    }
-
-    if (!found)
-    {
-        printf(
-            "You have not enrolled in any course offerings.\n"
-        );
-    }
-}
-
 static void student_enroll_course(int student_index)
 {
     Student *student;
@@ -4330,8 +4239,6 @@ static void student_enroll_course(int student_index)
         printf("No course offerings are available.\n");
         return;
     }
-
-    list_offerings();
 
     offering_number=
         read_int("Enter offering number: ");
@@ -4455,8 +4362,6 @@ static void student_withdraw_course(int student_index)
         return;
     }
 
-    list_student_enrollments(student_index);
-
     offering_number=
         read_int("Enter offering number to withdraw: ");
 
@@ -4518,61 +4423,67 @@ static void student_withdraw_course(int student_index)
 
 static void student_offerings_menu(int student_index)
 {
-    int option;
     int semester;
+    int option;
 
     while (1)
     {
         printf("\n");
         printf("----------------------------------------\n");
-        printf("Student: Course Enrollment\n");
+        printf("Student: Offerings\n");
         printf("----------------------------------------\n");
-        printf("1. List all offerings\n");
-        printf("2. List offerings by semester\n");
-        printf("3. Search offerings\n");
-        printf("4. Enroll in an offering\n");
-        printf("5. List my enrolled courses\n");
-        printf("6. Withdraw from an offering\n");
-        printf("7. Go back\n");
 
-        option=read_int("Enter an option: ");
+        semester=read_int(
+            "Enter semester number (0 to go back): "
+        );
 
-        if (option==1)
-        {
-            list_offerings();
-        }
-        else if (option==2)
-        {
-            semester=
-                read_int("Enter semester number: ");
-
-            list_offerings_by_semester(semester);
-        }
-        else if (option==3)
-        {
-            search_offerings();
-        }
-        else if (option==4)
-        {
-            student_enroll_course(student_index);
-        }
-        else if (option==5)
-        {
-            list_student_enrollments(student_index);
-        }
-        else if (option==6)
-        {
-            student_withdraw_course(student_index);
-        }
-        else if (option==7)
+        if (semester==0)
         {
             return;
         }
-        else
+
+        if (semester<0)
         {
             printf(
-                "Invalid option. Please try again.\n"
+                "Semester number must be greater than zero.\n"
             );
+            continue;
+        }
+
+        while (1)
+        {
+            list_offerings_by_semester(semester);
+
+            printf("\n");
+            printf("1. Search offerings\n");
+            printf("2. Enroll in an offering\n");
+            printf("3. Withdraw from an offering\n");
+            printf("4. Choose another semester\n");
+
+            option=read_int("Enter an option: ");
+
+            if (option==1)
+            {
+                search_offerings();
+            }
+            else if (option==2)
+            {
+                student_enroll_course(student_index);
+            }
+            else if (option==3)
+            {
+                student_withdraw_course(student_index);
+            }
+            else if (option==4)
+            {
+                break;
+            }
+            else
+            {
+                printf(
+                    "Invalid option. Please try again.\n"
+                );
+            }
         }
     }
 }
@@ -4820,7 +4731,7 @@ static void student_dashboard(int student_index)
         );
         printf("Student ID: %s\n", student->student_id);
         printf("\n");
-        printf("1. Course enrollment\n");
+        printf("1. Offerings\n");
         printf("2. Courses\n");
         printf("3. Report card\n");
         printf("4. Course survey\n");
@@ -5920,7 +5831,7 @@ static void faculty_dashboard(int faculty_index)
 
         printf("\n");
         printf("1. My offerings\n");
-        printf("2. Offerings in a semester\n");
+        printf("2. List of offerings in semester\n");
         printf("3. Courses\n");
         printf("4. Offer a course\n");
         printf("5. Log out\n");
@@ -5955,10 +5866,23 @@ static void faculty_dashboard(int faculty_index)
         }
         else if (option==2)
         {
-            semester=
-                read_int("Enter semester number: ");
+            semester=read_int("Enter semester number: ");
 
             list_offerings_by_semester(semester);
+
+            printf("\n1. Search offerings\n");
+            printf("2. Go back\n");
+
+            submenu_option=read_int("Enter an option: ");
+
+            if (submenu_option==1)
+            {
+                search_offerings();
+            }
+            else if (submenu_option!=2)
+            {
+                printf("Invalid option.\n");
+            }
         }
         else if (option==3)
         {
@@ -6439,6 +6363,8 @@ static void delete_student(void)
     char student_id[SMALL_SIZE];
     char confirmation[SMALL_SIZE];
     int student_index;
+    int offering_index;
+    int enrollment_index;
     int index;
 
     if (student_count==0)
@@ -6466,42 +6392,90 @@ static void delete_student(void)
         return;
     }
 
-    if (student_is_enrolled(student_id))
-    {
-        printf(
-            "This student cannot be deleted because "
-            "they are enrolled in a course offering.\n"
-        );
-
-        return;
-    }
-
     printf("\nStudent information:\n");
+
     printf(
         "Name: %s %s\n",
         students[student_index].first_name,
         students[student_index].last_name
     );
+
     printf(
         "Student ID: %s\n",
         students[student_index].student_id
     );
 
     read_line(
-        "Are you sure you want to delete this student? (yes/no): ",
+        "Are you sure you want to delete this student? "
+        "(yes/no): ",
         confirmation,
         sizeof(confirmation)
     );
 
-    if (strcmp(confirmation, "yes")!=0 &&
-        strcmp(confirmation, "YES")!=0 &&
-        strcmp(confirmation, "Yes")!=0)
+    if (!strings_equal_ignore_case(
+            confirmation,
+            "yes"
+        ))
     {
         printf("Student deletion was cancelled.\n");
         return;
     }
 
-    for (index=student_index; index<student_count-1; index++)
+    /*
+     * Remove the student from every course offering.
+     */
+    for (
+        offering_index=0;
+        offering_index<offering_count;
+        offering_index++
+    )
+    {
+        enrollment_index=offering_has_student(
+            offering_index,
+            student_id
+        );
+
+        if (enrollment_index==-1)
+        {
+            continue;
+        }
+
+        for (
+            index=enrollment_index;
+            index<
+                offerings[offering_index].enrolled_count-1;
+            index++
+        )
+        {
+            offerings[offering_index]
+                .enrollments[index]=
+                offerings[offering_index]
+                    .enrollments[index+1];
+        }
+
+        offerings[offering_index].enrolled_count--;
+
+        memset(
+            &offerings[offering_index].enrollments[
+                offerings[offering_index].enrolled_count
+            ],
+            0,
+            sizeof(
+                offerings[offering_index].enrollments[
+                    offerings[offering_index].enrolled_count
+                ]
+            )
+        );
+    }
+
+    /*
+     * Remove the student record.
+     */
+    for (
+        index=student_index;
+        index<student_count-1;
+        index++
+    )
     {
         students[index]=students[index+1];
     }
@@ -6514,11 +6488,10 @@ static void delete_student(void)
         sizeof(students[student_count])
     );
 
-        save_all();
+    save_all();
 
     printf("Student deleted successfully.\n");
 }
-
 static void admin_students_menu(void)
 {
     int option;
