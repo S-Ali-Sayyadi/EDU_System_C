@@ -196,6 +196,15 @@ static void faculty_record_grade_for_offering(
     int offering_index
 );
 
+static void record_grades_from_file(
+    int offering_index
+);
+
+static void faculty_record_grades(
+    int faculty_index,
+    int offering_index
+);
+
 static void faculty_manage_offering(int faculty_index);
 
 static void list_requests(void);
@@ -4167,8 +4176,6 @@ static void faculty_record_grade_for_offering(
         return;
     }
 
-    list_offering_students(offering_index);
-
     read_line(
         "Enter student ID: ",
         student_id,
@@ -4208,6 +4215,262 @@ static void faculty_record_grade_for_offering(
     printf("Grade recorded successfully.\n");
     printf("Student ID: %s\n", student_id);
     printf("Grade: %.2f\n", grade);
+}
+
+static void record_grades_from_file(
+    int offering_index
+)
+{
+    Offering *offering;
+    char path[STR_SIZE];
+    char line[LINE_SIZE];
+    FILE *file;
+
+    int updated_count=0;
+    int invalid_count=0;
+    int not_enrolled_count=0;
+
+    if (
+        offering_index<0 ||
+        offering_index>=offering_count
+    )
+    {
+        printf("Offering not found.\n");
+        return;
+    }
+
+    offering=&offerings[offering_index];
+
+    read_line(
+        "Enter CSV file path (student_id,grade): ",
+        path,
+        sizeof(path)
+    );
+
+    file=fopen(path, "r");
+
+    if (file==NULL)
+    {
+        printf("Could not open the CSV file.\n");
+        return;
+    }
+
+    while (fgets(line, sizeof(line), file)!=NULL)
+    {
+        char *comma;
+        char *student_id;
+        char *grade_text;
+        char *end;
+
+        double grade;
+        int enrollment_index;
+
+        line[strcspn(line, "\r\n")]='\0';
+        trim(line);
+
+        if (line[0]=='\0')
+        {
+            continue;
+        }
+
+        comma=strchr(line, ',');
+
+        if (
+            comma==NULL ||
+            strchr(comma+1, ',')!=NULL
+        )
+        {
+            invalid_count++;
+            continue;
+        }
+
+        *comma='\0';
+
+        student_id=line;
+        grade_text=comma+1;
+
+        trim(student_id);
+        trim(grade_text);
+
+        if (
+            strings_equal_ignore_case(
+                student_id,
+                "student_id"
+            ) &&
+            strings_equal_ignore_case(
+                grade_text,
+                "grade"
+            )
+        )
+        {
+            continue;
+        }
+
+        if (
+            student_id[0]=='\0' ||
+            grade_text[0]=='\0'
+        )
+        {
+            invalid_count++;
+            continue;
+        }
+
+        grade=strtod(grade_text, &end);
+
+        while (
+            *end!='\0' &&
+            isspace((unsigned char)*end)
+        )
+        {
+            end++;
+        }
+
+        if (
+            end==grade_text ||
+            *end!='\0' ||
+            grade!=grade ||
+            grade<0.0 ||
+            grade>20.0
+        )
+        {
+            invalid_count++;
+            continue;
+        }
+
+        enrollment_index=offering_has_student(
+            offering_index,
+            student_id
+        );
+
+        if (enrollment_index==-1)
+        {
+            not_enrolled_count++;
+            continue;
+        }
+
+        offering
+            ->enrollments[enrollment_index]
+            .grade=grade;
+
+        updated_count++;
+    }
+
+    fclose(file);
+
+    if (updated_count>0)
+    {
+        save_all();
+    }
+
+    printf(
+        "Updated %d grade(s).\n",
+        updated_count
+    );
+
+    if (invalid_count>0)
+    {
+        printf(
+            "Skipped invalid CSV lines: %d\n",
+            invalid_count
+        );
+    }
+
+    if (not_enrolled_count>0)
+    {
+        printf(
+            "Skipped students not enrolled "
+            "in this offering: %d\n",
+            not_enrolled_count
+        );
+    }
+}
+
+static void faculty_record_grades(
+    int faculty_index,
+    int offering_index
+)
+{
+    Faculty *faculty;
+    Offering *offering;
+    int option;
+
+    if (!calendar_state.grade_recording)
+    {
+        printf(
+            "Grade recording time is disabled.\n"
+        );
+        return;
+    }
+
+    if (
+        offering_index<0 ||
+        offering_index>=offering_count
+    )
+    {
+        printf("Offering not found.\n");
+        return;
+    }
+
+    faculty=&faculty_members[faculty_index];
+    offering=&offerings[offering_index];
+
+    if (
+        strcmp(
+            offering->faculty_id,
+            faculty->faculty_id
+        )!=0
+    )
+    {
+        printf(
+            "This offering does not belong to you.\n"
+        );
+        return;
+    }
+
+    if (offering->enrolled_count==0)
+    {
+        printf(
+            "No students are enrolled "
+            "in this offering.\n"
+        );
+        return;
+    }
+
+    while (1)
+    {
+        list_offering_students(offering_index);
+
+        printf("\n");
+        printf("1. Record one grade\n");
+        printf("2. Import grades from CSV\n");
+        printf("3. Go back\n");
+
+        option=read_int("Enter an option: ");
+
+        if (option==1)
+        {
+            faculty_record_grade_for_offering(
+                faculty_index,
+                offering_index
+            );
+        }
+        else if (option==2)
+        {
+            record_grades_from_file(
+                offering_index
+            );
+        }
+        else if (option==3)
+        {
+            return;
+        }
+        else
+        {
+            printf(
+                "Invalid option. Please try again.\n"
+            );
+        }
+    }
 }
 
 static void faculty_view_surveys(
@@ -4352,7 +4615,7 @@ static void faculty_manage_offering(int faculty_index)
 
         printf("\n");
         printf("1. Add capacity\n");
-        printf("2. Record a grade\n");
+        printf("2. Record grades\n");
         printf("3. Remove offering\n");
         printf("4. Publish a homework\n");
         printf("5. Publish an exam\n");
@@ -4370,10 +4633,9 @@ static void faculty_manage_offering(int faculty_index)
         }
         else if (option==2)
         {
-            faculty_record_grade_for_offering(
+            faculty_record_grades(
                 faculty_index,
-                offering_index
-            );
+                offering_index);
         }
         else if (option==3)
         {
