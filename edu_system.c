@@ -60,6 +60,7 @@ typedef struct
     char answer_school[STR_SIZE];
     char answer_book[STR_SIZE];
     char answer_bike[STR_SIZE];
+    int active;
 } Faculty;
 
 typedef struct
@@ -72,6 +73,7 @@ typedef struct
     char field[STR_SIZE];
     char department[STR_SIZE];
     int available_from_semester;
+    int active;
 } Course;
 
 typedef struct
@@ -197,7 +199,9 @@ static void copy_str(char *destination, const char *source, size_t size);
 
 static int find_student_index(const char *student_id);
 static int find_faculty_index(const char *faculty_id);
+static int find_active_faculty_index(const char *faculty_id);
 static int find_course_index(const char *course_id);
+static int find_active_course_index(const char *course_id);
 static int find_request_index(int request_id);
 
 static int collect_offering_indices(
@@ -642,7 +646,7 @@ static int prerequisites_exist(
 
         if (prerequisite[0]=='\0' ||
             strcmp(prerequisite,course_id)==0 ||
-            find_course_index(prerequisite)==-1)
+            find_active_course_index(prerequisite)==-1)
         {
             return 0;
         }
@@ -987,7 +991,7 @@ static void recover_faculty_password(void)
         );
 
         faculty_index=
-            find_faculty_index(faculty_id);
+            find_active_faculty_index(faculty_id);
 
         if (faculty_index==-1)
         {
@@ -1106,6 +1110,20 @@ static int find_faculty_index(const char *faculty_id)
     return -1;
 }
 
+static int find_active_faculty_index(const char *faculty_id)
+{
+    int index;
+
+    index=find_faculty_index(faculty_id);
+
+    if (index==-1 || !faculty_members[index].active)
+    {
+        return -1;
+    }
+
+    return index;
+}
+
 static int find_course_index(const char *course_id)
 {
     int index;
@@ -1118,6 +1136,20 @@ static int find_course_index(const char *course_id)
         }
     }
     return -1;
+}
+
+static int find_active_course_index(const char *course_id)
+{
+    int index;
+
+    index=find_course_index(course_id);
+
+    if (index==-1 || !courses[index].active)
+    {
+        return -1;
+    }
+
+    return index;
 }
 
 static int find_request_index(int request_id)
@@ -1307,7 +1339,8 @@ static int course_is_in_use(const char *course_id)
 
     for (index=0; index<offering_count; index++)
     {
-        if (strcmp(offerings[index].course_id, course_id)==0)
+        if (strcmp(offerings[index].course_id, course_id)==0 &&
+            offerings[index].semester>=calendar_state.current_semester)
         {
             return 1;
         }
@@ -1316,6 +1349,7 @@ static int course_is_in_use(const char *course_id)
     for (index=0; index<request_count; index++)
     {
         if (strcmp(requests[index].course_id, course_id)==0 &&
+            requests[index].semester>=calendar_state.current_semester &&
             strcmp(requests[index].status, "pending")==0)
         {
             return 1;
@@ -1330,7 +1364,8 @@ static int faculty_is_in_use(const char *faculty_id)
 
     for (index=0; index<offering_count; index++)
     {
-        if (strcmp(offerings[index].faculty_id, faculty_id)==0)
+        if (strcmp(offerings[index].faculty_id, faculty_id)==0 &&
+            offerings[index].semester>=calendar_state.current_semester)
         {
             return 1;
         }
@@ -1339,6 +1374,7 @@ static int faculty_is_in_use(const char *faculty_id)
     for (index=0; index<request_count; index++)
     {
         if (strcmp(requests[index].faculty_id, faculty_id)==0 &&
+            requests[index].semester>=calendar_state.current_semester &&
             strcmp(requests[index].status, "pending")==0)
         {
             return 1;
@@ -1570,6 +1606,8 @@ static int save_all(void)
 
         json_write_key_string(file,"answer_bike",faculty->answer_bike);
 
+        fprintf(file,",\"active\":%d",faculty->active);
+
         fputc('}', file);
     }
 
@@ -1604,6 +1642,8 @@ static int save_all(void)
         json_write_key_string(file,"department",course->department);
 
         fprintf(file,",\"available_from_semester\":%d",course->available_from_semester);
+
+        fprintf(file,",\"active\":%d",course->active);
 
         fputc('}', file);
     }
@@ -2061,6 +2101,7 @@ static int load_all(void)
             memset(&faculty,0,sizeof(faculty));
 
             copy_str(faculty.answer_school,"Unknown",sizeof(faculty.answer_school));
+            faculty.active=1;
 
             faculty_fields_loaded=next_json_string(&cursor,faculty.first_name,sizeof(faculty.first_name)) &&
                 next_json_string(&cursor,faculty.last_name,sizeof(faculty.last_name)) &&
@@ -2095,7 +2136,17 @@ static int load_all(void)
                                 faculty.answer_bike,
                                 sizeof(faculty.answer_bike));
 
-            if (faculty_fields_loaded)
+            if (faculty_fields_loaded &&
+                strstr(line,"\"active\"")!=NULL)
+            {
+                faculty_fields_loaded=next_json_int(
+                    &cursor,
+                    &faculty.active
+                );
+            }
+
+            if (faculty_fields_loaded &&
+                (faculty.active==0 || faculty.active==1))
             {
                 faculty_members[faculty_count]=
                     faculty;
@@ -2116,6 +2167,7 @@ static int load_all(void)
 
             course.available_from_semester=
                 COURSE_AVAILABILITY_UNRESTRICTED;
+            course.active=1;
 
             course_fields_loaded=
                 next_json_string(
@@ -2166,8 +2218,18 @@ static int load_all(void)
             }
 
             if (course_fields_loaded &&
+                strstr(line,"\"active\"")!=NULL)
+            {
+                course_fields_loaded=next_json_int(
+                    &cursor,
+                    &course.active
+                );
+            }
+
+            if (course_fields_loaded &&
                 course.available_from_semester>=
-                    COURSE_AVAILABILITY_NEXT_SEMESTER)
+                    COURSE_AVAILABILITY_NEXT_SEMESTER &&
+                (course.active==0 || course.active==1))
             {
                 courses[course_count]=course;
                 course_count++;
@@ -2506,6 +2568,8 @@ static void add_faculty_seed(
         sizeof(faculty->answer_bike)
     );
 
+    faculty->active=1;
+
     faculty_count++;
 }
 
@@ -2574,6 +2638,8 @@ static void add_course_seed(
 
     course->available_from_semester=
     COURSE_AVAILABILITY_UNRESTRICTED;
+
+    course->active=1;
 
     course_count++;
 }
@@ -3445,6 +3511,11 @@ static void search_faculty(void)
 
     for (index=0; index<faculty_count; index++)
     {
+        if (!faculty_members[index].active)
+        {
+            continue;
+        }
+
         matches=0;
 
         if (option==1)
@@ -3526,6 +3597,11 @@ static void search_courses(void)
 
     for (index=0; index<course_count; index++)
     {
+        if (!courses[index].active)
+        {
+            continue;
+        }
+
         matches=0;
 
         if (option==1)
@@ -4125,11 +4201,11 @@ static void faculty_offer_course_request(
 
     read_line("Enter course ID: ",course_id,sizeof(course_id));
 
-    course_index=find_course_index(course_id);
+    course_index=find_active_course_index(course_id);
 
     if (course_index==-1)
     {
-        printf("Course ID not found.\n");
+        printf("Active course ID not found.\n");
         return;
     }
 
@@ -4684,10 +4760,11 @@ static void approve_request(void)
             request->faculty_id
         );
 
-        if (course_index==-1)
+        if (course_index==-1 ||
+            !courses[course_index].active)
         {
             printf(
-                "The requested course no longer exists.\n"
+                "The requested course is not active.\n"
             );
             return;
         }
@@ -4706,10 +4783,11 @@ static void approve_request(void)
             return;
         }
 
-        if (faculty_index==-1)
+        if (faculty_index==-1 ||
+            !faculty_members[faculty_index].active)
         {
             printf(
-                "The faculty member no longer exists.\n"
+                "The faculty member is not active.\n"
             );
             return;
         }
@@ -7752,21 +7830,23 @@ static void admin_students_menu(void)
 static void list_faculty(void)
 {
     int index;
+    int displayed_count=0;
 
     printf("\n");
     printf("----------------------------------------\n");
     printf("Faculty Members List\n");
     printf("----------------------------------------\n");
 
-    if (faculty_count==0)
-    {
-        printf("No faculty members have been registered.\n");
-        return;
-    }
-
     for (index=0; index<faculty_count; index++)
     {
-        printf("\nFaculty member number %d\n", index+1);
+        if (!faculty_members[index].active)
+        {
+            continue;
+        }
+
+        displayed_count++;
+
+        printf("\nFaculty member number %d\n", displayed_count);
 
         printf(
             "Name: %s %s\n",
@@ -7805,7 +7885,13 @@ static void list_faculty(void)
         );
     }
 
-    printf("\nTotal faculty members: %d\n", faculty_count);
+    if (displayed_count==0)
+    {
+        printf("No active faculty members were found.\n");
+        return;
+    }
+
+    printf("\nTotal active faculty members: %d\n", displayed_count);
 }
 
 static void register_faculty(void)
@@ -7920,6 +8006,8 @@ static void register_faculty(void)
         faculty->answer_bike,
         sizeof(faculty->answer_bike)
     );
+
+    faculty->active=1;
 
     if (!faculty_record_is_valid(faculty))
     {
@@ -8138,6 +8226,8 @@ static void import_faculty_file(void)
             sizeof(faculty.answer_bike)
         );
 
+        faculty.active=1;
+
         if (!faculty_record_is_valid(&faculty))
         {
             invalid_count++;
@@ -8188,7 +8278,6 @@ static void delete_faculty(void)
     char faculty_id[SMALL_SIZE];
     char confirmation[SMALL_SIZE];
     int faculty_index;
-    int index;
 
     if (faculty_count==0)
     {
@@ -8209,20 +8298,21 @@ static void delete_faculty(void)
 
     faculty_index=find_faculty_index(faculty_id);
 
-    if (faculty_index==-1)
+    if (faculty_index==-1 ||
+        !faculty_members[faculty_index].active)
     {
-        printf("Faculty ID not found.\n");
+        printf("Active faculty ID not found.\n");
         return;
     }
 
-        if (faculty_is_in_use(faculty_id))
-        {
-            printf(
+    if (faculty_is_in_use(faculty_id))
+    {
+        printf(
             "This faculty member cannot be deleted because "
-            "they have an offering or pending request.\n"
-            );
-            return;
-        }
+            "they have a current or future offering or request.\n"
+        );
+        return;
+    }
 
     printf("\nFaculty member information:\n");
 
@@ -8257,23 +8347,7 @@ static void delete_faculty(void)
         return;
     }
 
-    for (
-        index=faculty_index;
-        index<faculty_count-1;
-        index++
-    )
-    {
-        faculty_members[index]=
-            faculty_members[index+1];
-    }
-
-    faculty_count--;
-
-    memset(
-        &faculty_members[faculty_count],
-        0,
-        sizeof(faculty_members[faculty_count])
-    );
+    faculty_members[faculty_index].active=0;
 
     save_all();
 
@@ -8336,21 +8410,23 @@ static void admin_faculty_menu(void)
 static void list_courses(void)
 {
     int index;
+    int displayed_count=0;
 
     printf("\n");
     printf("----------------------------------------\n");
     printf("Courses List\n");
     printf("----------------------------------------\n");
 
-    if (course_count==0)
-    {
-        printf("No courses have been registered.\n");
-        return;
-    }
-
     for (index=0; index<course_count; index++)
     {
-        printf("\nCourse number %d\n", index+1);
+        if (!courses[index].active)
+        {
+            continue;
+        }
+
+        displayed_count++;
+
+        printf("\nCourse number %d\n", displayed_count);
         printf("Course name: %s\n", courses[index].name);
         printf("Course ID: %s\n", courses[index].course_id);
         printf("Units: %d\n", courses[index].units);
@@ -8366,7 +8442,13 @@ static void list_courses(void)
         );
     }
 
-    printf("\nTotal courses: %d\n", course_count);
+    if (displayed_count==0)
+    {
+        printf("No active courses were found.\n");
+        return;
+    }
+
+    printf("\nTotal active courses: %d\n", displayed_count);
 }
 
 static void register_course(void)
@@ -8502,6 +8584,8 @@ static void register_course(void)
         return;
     }
 
+    course->active=1;
+
     if (calendar_state.offering==PHASE_NOT_STARTED)
     {
         course->available_from_semester=
@@ -8542,7 +8626,6 @@ static void delete_course(void)
     char course_id[SMALL_SIZE];
     char confirmation[SMALL_SIZE];
     int course_index;
-    int index;
 
     if (course_count==0)
     {
@@ -8563,20 +8646,21 @@ static void delete_course(void)
 
     course_index=find_course_index(course_id);
 
-    if (course_index==-1)
+    if (course_index==-1 ||
+        !courses[course_index].active)
     {
-        printf("Course ID not found.\n");
+        printf("Active course ID not found.\n");
         return;
     }
- 
-         if (course_is_in_use(course_id))
-        {
-            printf(
+
+    if (course_is_in_use(course_id))
+    {
+        printf(
             "This course cannot be deleted because it is used "
-            "in an offering or pending request.\n"
-           );
-           return;
-         }
+            "in a current or future offering or request.\n"
+        );
+        return;
+    }
 
     printf("\nCourse information:\n");
     printf(
@@ -8599,7 +8683,7 @@ static void delete_course(void)
         sizeof(confirmation)
     );
 
-    if (strcmp(confirmation, "yes")!= 0&&
+    if (strcmp(confirmation, "yes")!=0&&
         strcmp(confirmation, "Yes")!=0&&
         strcmp(confirmation, "YES")!=0)
     {
@@ -8607,22 +8691,7 @@ static void delete_course(void)
         return;
     }
 
-    for (
-        index=course_index;
-        index<course_count-1;
-        index++
-    )
-    {
-        courses[index]=courses[index+1];
-    }
-
-    course_count--;
-
-    memset(
-        &courses[course_count],
-        0,
-        sizeof(courses[course_count])
-    );
+    courses[course_index].active=0;
 
     save_all();
 
@@ -9065,11 +9134,11 @@ static void login_faculty(void)
         sizeof(username)
     );
 
-    index=find_faculty_index(username);
+    index=find_active_faculty_index(username);
 
     if (index==-1)
     {
-        printf("Faculty ID not found.\n");
+        printf("Active faculty ID not found.\n");
         return;
     }
 
