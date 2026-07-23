@@ -443,6 +443,7 @@ static void show_semester_report(
     int semester
 );
 
+static void search_passed_courses(int student_index);
 static void student_report_card(int student_index);
 
 static void copy_str(char *destination,const char *source,size_t size)
@@ -6420,6 +6421,203 @@ static void show_semester_report(
     );
 }
 
+static void search_passed_courses(int student_index)
+{
+    Student *student;
+    Offering *offering;
+    Enrollment *enrollment;
+    Course *course;
+    Faculty *faculty;
+    char key[STR_SIZE];
+    char faculty_name[STR_SIZE*2+2];
+    int option;
+    int semester=0;
+    int offering_index;
+    int enrollment_index;
+    int course_index;
+    int faculty_index;
+    int found=0;
+    int matches;
+
+    student=&students[student_index];
+
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Search Passed Courses\n");
+    printf("----------------------------------------\n");
+    printf("1. Course name\n");
+    printf("2. Course ID\n");
+    printf("3. Semester\n");
+    printf("4. Faculty ID or name\n");
+
+    option=read_int("Enter an option: ");
+
+    if (option<1 || option>4)
+    {
+        printf("Invalid search option.\n");
+        return;
+    }
+
+    if (option==3)
+    {
+        semester=read_int("Enter semester number: ");
+
+        if (semester<=0)
+        {
+            printf(
+                "Semester number must be greater than zero.\n"
+            );
+            return;
+        }
+    }
+    else
+    {
+        read_line(
+            "Enter search phrase: ",
+            key,
+            sizeof(key)
+        );
+
+        if (key[0]=='\0')
+        {
+            printf("Search phrase cannot be empty.\n");
+            return;
+        }
+    }
+
+    for (
+        offering_index=0;
+        offering_index<offering_count;
+        offering_index++
+    )
+    {
+        offering=&offerings[offering_index];
+
+        enrollment_index=offering_has_student(
+            offering_index,
+            student->student_id
+        );
+
+        if (enrollment_index==-1)
+        {
+            continue;
+        }
+
+        enrollment=
+            &offering->enrollments[enrollment_index];
+
+        if (enrollment->grade<PASSING_GRADE)
+        {
+            continue;
+        }
+
+        course_index=find_course_index(
+            offering->course_id
+        );
+
+        faculty_index=find_faculty_index(
+            offering->faculty_id
+        );
+
+        course=NULL;
+        faculty=NULL;
+        faculty_name[0]='\0';
+
+        if (course_index!=-1)
+        {
+            course=&courses[course_index];
+        }
+
+        if (faculty_index!=-1)
+        {
+            faculty=&faculty_members[faculty_index];
+
+            snprintf(
+                faculty_name,
+                sizeof(faculty_name),
+                "%s %s",
+                faculty->first_name,
+                faculty->last_name
+            );
+        }
+
+        matches=0;
+
+        if (option==1 && course!=NULL)
+        {
+            matches=contains_ignore_case(
+                course->name,
+                key
+            );
+        }
+        else if (option==2)
+        {
+            matches=contains_ignore_case(
+                offering->course_id,
+                key
+            );
+        }
+        else if (option==3)
+        {
+            matches=offering->semester==semester;
+        }
+        else if (option==4)
+        {
+            matches=contains_ignore_case(
+                    offering->faculty_id,
+                    key
+                ) ||
+                contains_ignore_case(
+                    faculty_name,
+                    key
+                );
+        }
+
+        if (!matches)
+        {
+            continue;
+        }
+
+        printf("\nPassed course number %d\n",found+1);
+        printf("Course ID: %s\n",offering->course_id);
+
+        if (course!=NULL)
+        {
+            printf("Course name: %s\n",course->name);
+            printf("Units: %d\n",course->units);
+        }
+        else
+        {
+            printf("Course name: Unknown\n");
+            printf("Units: Unknown\n");
+        }
+
+        printf("Semester: %d\n",offering->semester);
+        printf("Grade: %.2f\n",enrollment->grade);
+        printf("Faculty ID: %s\n",offering->faculty_id);
+
+        if (faculty!=NULL)
+        {
+            printf(
+                "Faculty name: %s %s\n",
+                faculty->first_name,
+                faculty->last_name
+            );
+        }
+        else
+        {
+            printf("Faculty name: Unknown\n");
+        }
+
+        found++;
+    }
+
+    if (!found)
+    {
+        printf("No matching passed course was found.\n");
+    }
+}
+
 static void student_report_card(int student_index)
 {
     Student *student=
@@ -6516,7 +6714,8 @@ static void student_report_card(int student_index)
 
         printf("\n");
         printf("1. View a semester report\n");
-        printf("2. Go back\n");
+        printf("2. Search passed courses\n");
+        printf("3. Go back\n");
 
         option=read_int("Enter an option: ");
 
@@ -6531,6 +6730,10 @@ static void student_report_card(int student_index)
             );
         }
         else if (option==2)
+        {
+            search_passed_courses(student_index);
+        }
+        else if (option==3)
         {
             return;
         }
