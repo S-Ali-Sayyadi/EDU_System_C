@@ -1,7 +1,22 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <time.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <conio.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#endif
 
 #define MAX_STUDENTS 1000
 #define MAX_FACULTY 500
@@ -19,6 +34,16 @@
 #define DATA_TEMP_FILE "edu_data.json.tmp"
 #define COURSE_AVAILABILITY_NEXT_SEMESTER -1
 #define COURSE_AVAILABILITY_UNRESTRICTED 0
+#define UI_MIN_WIDTH 50
+#define UI_MAX_WIDTH 76
+#define UI_RESET "\033[0m"
+#define UI_BOLD "\033[1m"
+#define UI_PRIMARY "\033[96m"
+#define UI_ACCENT "\033[94m"
+#define UI_SUCCESS "\033[92m"
+#define UI_WARNING "\033[93m"
+#define UI_ERROR "\033[91m"
+#define UI_MUTED "\033[90m"
 
 typedef struct
 {
@@ -149,6 +174,8 @@ static int course_count = 0;
 static int offering_count = 0;
 static int request_count = 0;
 static int next_request_id = 1;
+static int ui_color_enabled=0;
+static int ui_animation_enabled=0;
 
 static int strings_equal_ignore_case(
     const char *first,
@@ -351,8 +378,34 @@ static void enroll_seed(
 );
 
 static void initialize_sample_data(void);
+static void ui_initialize(void);
+static void ui_sleep_ms(int milliseconds);
+static int ui_console_width(void);
+static const char *ui_style(const char *style);
+static void ui_repeat(char character,int count);
+static void ui_box_text(
+    const char *text,
+    int inner_width,
+    const char *style,
+    int bold
+);
+static void ui_page_header(
+    const char *title,
+    const char *subtitle
+);
+static void ui_menu_item(int number,const char *label);
+static void ui_loading(const char *message);
+static void ui_splash(void);
+static void ui_success_message(const char *message);
+static void ui_warning_message(const char *message);
+static void ui_error_message(const char *message);
 static void clear_screen(void);
 static void wait_for_enter(void);
+static void read_password(
+    const char *prompt,
+    char *output,
+    size_t size
+);
 
 static void list_students(void);
 static void register_student(void);
@@ -443,7 +496,7 @@ static double read_double(const char *prompt)
             return value;
         }
 
-        printf("Please enter a valid number.\n");
+        ui_error_message("Please enter a valid number.");
     }
 }
 
@@ -814,8 +867,8 @@ static int ask_retry_or_back(const char *back_label)
 
     while (1)
     {
-        printf("1. Retry\n");
-        printf("2. %s\n", back_label);
+        ui_menu_item(1,"Retry");
+        ui_menu_item(2,back_label);
 
         option=read_int("Enter an option: ");
 
@@ -845,7 +898,7 @@ static int read_new_password(
 
     while (1)
     {
-        read_line(
+        read_password(
             "Enter your new password: ",
             new_password,
             sizeof(new_password)
@@ -863,7 +916,7 @@ static int read_new_password(
             continue;
         }
 
-        read_line(
+        read_password(
             "Confirm your password: ",
             confirmation,
             sizeof(confirmation)
@@ -903,10 +956,7 @@ static void recover_student_password(void)
 
     clear_screen();
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Student Password Recovery\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Student Password Recovery",NULL);
 
     while (1)
     {
@@ -921,7 +971,7 @@ static void recover_student_password(void)
 
         if (student_index==-1)
         {
-            printf("Username not found.\n");
+            ui_error_message("Username not found.");
 
             if (!ask_retry_or_back(
                     "Go back"
@@ -982,10 +1032,7 @@ static void recover_faculty_password(void)
 
     clear_screen();
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Faculty Password Recovery\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Faculty Password Recovery",NULL);
 
     while (1)
     {
@@ -1000,7 +1047,7 @@ static void recover_faculty_password(void)
 
         if (faculty_index==-1)
         {
-            printf("Username not found.\n");
+            ui_error_message("Username not found.");
 
             if (!ask_retry_or_back(
                     "Go back"
@@ -1059,13 +1106,10 @@ static void forgot_password_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Password Recovery\n");
-        printf("----------------------------------------\n");
-        printf("1. Recover student password\n");
-        printf("2. Recover faculty password\n");
-        printf("3. Go back\n");
+        ui_page_header("Password Recovery",NULL);
+        ui_menu_item(1,"Recover student password");
+        ui_menu_item(2,"Recover faculty password");
+        ui_menu_item(3,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -3208,9 +3252,310 @@ static void initialize_sample_data(void)
     calendar_state.grade_recording=PHASE_NOT_STARTED;
 }
 
+static void ui_initialize(void)
+{
+#ifdef _WIN32
+    HANDLE output=GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode=0;
+
+    ui_animation_enabled=
+        _isatty(_fileno(stdout)) &&
+        _isatty(_fileno(stdin));
+
+    if (output!=INVALID_HANDLE_VALUE &&
+        GetConsoleMode(output,&mode) &&
+        SetConsoleMode(
+            output,
+            mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        ))
+    {
+        ui_color_enabled=1;
+    }
+
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#else
+    ui_animation_enabled=
+        isatty(STDOUT_FILENO) &&
+        isatty(STDIN_FILENO);
+    ui_color_enabled=ui_animation_enabled;
+#endif
+}
+
+static void ui_sleep_ms(int milliseconds)
+{
+    if (milliseconds<=0)
+    {
+        return;
+    }
+
+#ifdef _WIN32
+    Sleep((DWORD)milliseconds);
+#else
+    {
+        struct timespec delay;
+
+        delay.tv_sec=milliseconds/1000;
+        delay.tv_nsec=
+            (long)(milliseconds%1000)*1000000L;
+        nanosleep(&delay,NULL);
+    }
+#endif
+}
+
+static int ui_console_width(void)
+{
+    int width=UI_MAX_WIDTH;
+
+#ifdef _WIN32
+    {
+        CONSOLE_SCREEN_BUFFER_INFO information;
+        HANDLE output=GetStdHandle(STD_OUTPUT_HANDLE);
+
+        if (output!=INVALID_HANDLE_VALUE &&
+            GetConsoleScreenBufferInfo(
+                output,
+                &information
+            ))
+        {
+            width=
+                information.srWindow.Right-
+                information.srWindow.Left+1;
+        }
+    }
+#else
+    {
+        struct winsize size;
+
+        if (ioctl(
+                STDOUT_FILENO,
+                TIOCGWINSZ,
+                &size
+            )==0 &&
+            size.ws_col>0)
+        {
+            width=(int)size.ws_col;
+        }
+    }
+#endif
+
+    width-=2;
+
+    if (width<UI_MIN_WIDTH)
+    {
+        width=UI_MIN_WIDTH;
+    }
+
+    if (width>UI_MAX_WIDTH)
+    {
+        width=UI_MAX_WIDTH;
+    }
+
+    return width;
+}
+
+static const char *ui_style(const char *style)
+{
+    if (!ui_color_enabled)
+    {
+        return "";
+    }
+
+    return style;
+}
+
+static void ui_repeat(char character,int count)
+{
+    int index;
+
+    for (index=0; index<count; index++)
+    {
+        putchar(character);
+    }
+}
+
+static void ui_box_text(
+    const char *text,
+    int inner_width,
+    const char *style,
+    int bold
+)
+{
+    int length;
+    int left_padding;
+    int right_padding;
+    char output[STR_SIZE*2];
+
+    if (text==NULL)
+    {
+        text="";
+    }
+
+    copy_str(
+        output,
+        text,
+        sizeof(output)
+    );
+
+    if ((int)strlen(output)>inner_width)
+    {
+        output[inner_width]='\0';
+    }
+
+    length=(int)strlen(output);
+    left_padding=(inner_width-length)/2;
+    right_padding=inner_width-length-left_padding;
+
+    printf("%s|%s",ui_style(UI_PRIMARY),ui_style(UI_RESET));
+    ui_repeat(' ',left_padding);
+    printf(
+        "%s%s%s%s",
+        bold ? ui_style(UI_BOLD) : "",
+        ui_style(style),
+        output,
+        ui_style(UI_RESET)
+    );
+    ui_repeat(' ',right_padding);
+    printf("%s|%s\n",ui_style(UI_PRIMARY),ui_style(UI_RESET));
+}
+
+static void ui_page_header(
+    const char *title,
+    const char *subtitle
+)
+{
+    int width=ui_console_width();
+    int inner_width=width-2;
+
+    printf("\n%s+",ui_style(UI_PRIMARY));
+    ui_repeat('=',inner_width);
+    printf("+%s\n",ui_style(UI_RESET));
+
+    ui_box_text(
+        title,
+        inner_width,
+        UI_PRIMARY,
+        1
+    );
+
+    if (subtitle!=NULL && subtitle[0]!='\0')
+    {
+        ui_box_text(
+            subtitle,
+            inner_width,
+            UI_MUTED,
+            0
+        );
+    }
+
+    printf("%s+",ui_style(UI_PRIMARY));
+    ui_repeat('-',inner_width);
+    printf("+%s\n\n",ui_style(UI_RESET));
+}
+
+static void ui_menu_item(int number,const char *label)
+{
+    printf(
+        "  %s%s[%d]%s  %s\n",
+        ui_style(UI_BOLD),
+        ui_style(UI_ACCENT),
+        number,
+        ui_style(UI_RESET),
+        label
+    );
+}
+
+static void ui_loading(const char *message)
+{
+    const char frames[]="|/-\\";
+    int frame;
+
+    if (!ui_animation_enabled)
+    {
+        printf("%s...\n",message);
+        return;
+    }
+
+    for (frame=0; frame<8; frame++)
+    {
+        printf(
+            "\r  %s%c%s %s",
+            ui_style(UI_ACCENT),
+            frames[frame%4],
+            ui_style(UI_RESET),
+            message
+        );
+        fflush(stdout);
+        ui_sleep_ms(55);
+    }
+
+    if (ui_color_enabled)
+    {
+        printf("\r\033[2K");
+    }
+    else
+    {
+        printf("\r");
+        ui_repeat(' ',ui_console_width());
+        printf("\r");
+    }
+
+    fflush(stdout);
+}
+
+static void ui_splash(void)
+{
+    if (!ui_animation_enabled)
+    {
+        return;
+    }
+
+    clear_screen();
+    ui_page_header(
+        "Educational Management System",
+        "Fast, focused and ready"
+    );
+    ui_loading("Preparing your workspace");
+    clear_screen();
+}
+
+static void ui_success_message(const char *message)
+{
+    printf(
+        "\n%s%s[OK]%s %s\n",
+        ui_style(UI_BOLD),
+        ui_style(UI_SUCCESS),
+        ui_style(UI_RESET),
+        message
+    );
+}
+
+static void ui_warning_message(const char *message)
+{
+    printf(
+        "\n%s%s[!]%s %s\n",
+        ui_style(UI_BOLD),
+        ui_style(UI_WARNING),
+        ui_style(UI_RESET),
+        message
+    );
+}
+
+static void ui_error_message(const char *message)
+{
+    printf(
+        "\n%s%s[X]%s %s\n",
+        ui_style(UI_BOLD),
+        ui_style(UI_ERROR),
+        ui_style(UI_RESET),
+        message
+    );
+}
+
 static void clear_screen(void)
 {
 #ifdef _WIN32
+    fflush(stdout);
     system("cls");
 #else
     printf("\033[2J\033[H");
@@ -3222,11 +3567,138 @@ static void wait_for_enter(void)
 {
     char line[8];
 
-    read_line(
-        "Press Enter to continue...",
-        line,
-        sizeof(line)
+    printf(
+        "\n%sPress Enter to continue...%s",
+        ui_style(UI_MUTED),
+        ui_style(UI_RESET)
     );
+    fflush(stdout);
+
+    if (fgets(line,sizeof(line),stdin)==NULL)
+    {
+        clearerr(stdin);
+    }
+}
+
+static void read_password(
+    const char *prompt,
+    char *output,
+    size_t size
+)
+{
+    size_t length=0;
+
+    if (output==NULL || size==0)
+    {
+        return;
+    }
+
+    if (!ui_animation_enabled)
+    {
+        read_line(prompt,output,size);
+        return;
+    }
+
+    printf(
+        "%s> %s%s",
+        ui_style(UI_ACCENT),
+        prompt,
+        ui_style(UI_RESET)
+    );
+    fflush(stdout);
+
+#ifdef _WIN32
+    while (length+1<size)
+    {
+        int character=_getch();
+
+        if (character=='\r' || character=='\n')
+        {
+            break;
+        }
+
+        if (character=='\b')
+        {
+            if (length>0)
+            {
+                length--;
+                printf("\b \b");
+                fflush(stdout);
+            }
+
+            continue;
+        }
+
+        if (character==0 || character==224)
+        {
+            _getch();
+            continue;
+        }
+
+        if (isprint((unsigned char)character))
+        {
+            output[length++]=(char)character;
+            putchar('*');
+            fflush(stdout);
+        }
+    }
+#else
+    {
+        struct termios original;
+        struct termios hidden;
+
+        if (tcgetattr(STDIN_FILENO,&original)!=0)
+        {
+            read_line("",output,size);
+            return;
+        }
+
+        hidden=original;
+        hidden.c_lflag&=(tcflag_t)~(ECHO | ICANON);
+        tcsetattr(STDIN_FILENO,TCSAFLUSH,&hidden);
+
+        while (length+1<size)
+        {
+            unsigned char character;
+            ssize_t result=read(
+                STDIN_FILENO,
+                &character,
+                1
+            );
+
+            if (result<=0 ||
+                character=='\r' ||
+                character=='\n')
+            {
+                break;
+            }
+
+            if (character==127 || character=='\b')
+            {
+                if (length>0)
+                {
+                    length--;
+                    printf("\b \b");
+                    fflush(stdout);
+                }
+
+                continue;
+            }
+
+            if (isprint(character))
+            {
+                output[length++]=(char)character;
+                putchar('*');
+                fflush(stdout);
+            }
+        }
+
+        tcsetattr(STDIN_FILENO,TCSAFLUSH,&original);
+    }
+#endif
+
+    output[length]='\0';
+    putchar('\n');
 }
 
 static int collect_offering_indices(
@@ -3413,15 +3885,12 @@ static void search_students(void)
     int found=0;
     int matches;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Search Students\n");
-    printf("----------------------------------------\n");
-    printf("1. First name\n");
-    printf("2. Last name\n");
-    printf("3. Student ID\n");
-    printf("4. Field\n");
-    printf("5. Department\n");
+    ui_page_header("Search Students",NULL);
+    ui_menu_item(1,"First name");
+    ui_menu_item(2,"Last name");
+    ui_menu_item(3,"Student ID");
+    ui_menu_item(4,"Field");
+    ui_menu_item(5,"Department");
 
     option=read_int("Enter an option: ");
 
@@ -3495,15 +3964,12 @@ static void search_faculty(void)
     int found=0;
     int matches;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Search Faculty Members\n");
-    printf("----------------------------------------\n");
-    printf("1. First name\n");
-    printf("2. Last name\n");
-    printf("3. Faculty ID\n");
-    printf("4. Field\n");
-    printf("5. Department\n");
+    ui_page_header("Search Faculty Members",NULL);
+    ui_menu_item(1,"First name");
+    ui_menu_item(2,"Last name");
+    ui_menu_item(3,"Faculty ID");
+    ui_menu_item(4,"Field");
+    ui_menu_item(5,"Department");
 
     option=read_int("Enter an option: ");
 
@@ -3582,14 +4048,11 @@ static void search_courses(void)
     int found=0;
     int matches;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Search Courses\n");
-    printf("----------------------------------------\n");
-    printf("1. Course name\n");
-    printf("2. Course ID\n");
-    printf("3. Field\n");
-    printf("4. Department\n");
+    ui_page_header("Search Courses",NULL);
+    ui_menu_item(1,"Course name");
+    ui_menu_item(2,"Course ID");
+    ui_menu_item(3,"Field");
+    ui_menu_item(4,"Department");
 
     option=read_int("Enter an option: ");
 
@@ -3675,21 +4138,18 @@ static void search_offerings(
     int matches;
     int result_number=0;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Search Course Offerings\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Search Course Offerings",NULL);
 
     if (semester_filter>0)
     {
         printf("Semester: %d\n", semester_filter);
     }
 
-    printf("1. Course name\n");
-    printf("2. Course ID\n");
-    printf("3. Faculty ID or name\n");
-    printf("4. Department\n");
-    printf("5. Place\n");
+    ui_menu_item(1,"Course name");
+    ui_menu_item(2,"Course ID");
+    ui_menu_item(3,"Faculty ID or name");
+    ui_menu_item(4,"Department");
+    ui_menu_item(5,"Place");
 
     option=read_int("Enter an option: ");
 
@@ -3790,13 +4250,10 @@ static void course_catalog_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Course Catalog\n");
-        printf("----------------------------------------\n");
-        printf("1. List courses\n");
-        printf("2. Search courses\n");
-        printf("3. Go back\n");
+        ui_page_header("Course Catalog",NULL);
+        ui_menu_item(1,"List courses");
+        ui_menu_item(2,"Search courses");
+        ui_menu_item(3,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -4032,10 +4489,7 @@ static void admin_offerings_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Admin: Offering Management\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Admin: Offering Management",NULL);
 
         semester=read_int(
             "Enter semester number "
@@ -4071,7 +4525,7 @@ static void admin_offerings_menu(void)
             list_offerings_by_semester(semester);
 
             printf("\n");
-            printf("1. Search offerings\n");
+            ui_menu_item(1,"Search offerings");
             printf(
                 "2. Add student to an offering\n"
             );
@@ -4081,7 +4535,7 @@ static void admin_offerings_menu(void)
             printf(
                 "4. Add capacity to an offering\n"
             );
-            printf("5. Go back\n");
+            ui_menu_item(5,"Go back");
 
             option=read_int("Enter an option: ");
 
@@ -4160,10 +4614,7 @@ static void list_faculty_offerings(int faculty_index)
     int index;
     Faculty *faculty=&faculty_members[faculty_index];
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("My Course Offerings\n");
-    printf("----------------------------------------\n");
+    ui_page_header("My Course Offerings",NULL);
 
     count=collect_offering_indices(
         0,
@@ -4218,10 +4669,7 @@ static void faculty_offer_course_request(
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Request a Course Offering\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Request a Course Offering",NULL);
 
     list_courses();
 
@@ -4640,10 +5088,7 @@ static void list_requests(void)
 {
     int index;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Course Offering Requests\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Course Offering Requests",NULL);
 
     if (request_count==0)
     {
@@ -5095,14 +5540,11 @@ static void admin_requests_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Admin: Request Management\n");
-        printf("----------------------------------------\n");
-        printf("1. List requests\n");
-        printf("2. Approve a request\n");
-        printf("3. Reject a request\n");
-        printf("4. Go back\n");
+        ui_page_header("Admin: Request Management",NULL);
+        ui_menu_item(1,"List requests");
+        ui_menu_item(2,"Approve a request");
+        ui_menu_item(3,"Reject a request");
+        ui_menu_item(4,"Go back");
 
         option =
             read_int("Enter an option: ");
@@ -5384,10 +5826,7 @@ static void student_offerings_menu(int student_index)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Student: Offerings\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Student: Offerings",NULL);
 
         semester=read_int(
             "Enter semester number (0 to go back): "
@@ -5421,10 +5860,10 @@ static void student_offerings_menu(int student_index)
             list_offerings_by_semester(semester);
 
             printf("\n");
-            printf("1. Search offerings\n");
-            printf("2. Enroll in an offering\n");
-            printf("3. Withdraw from an offering\n");
-            printf("4. Choose another semester\n");
+            ui_menu_item(1,"Search offerings");
+            ui_menu_item(2,"Enroll in an offering");
+            ui_menu_item(3,"Withdraw from an offering");
+            ui_menu_item(4,"Choose another semester");
 
             option=read_int("Enter an option: ");
 
@@ -5513,10 +5952,7 @@ static void student_course_survey(int student_index)
 
     student=&students[student_index];
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Student: Course Survey\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Student: Course Survey",NULL);
 
     semester=calendar_state.current_semester;
 
@@ -5713,10 +6149,7 @@ static void student_dashboard(int student_index)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Student Dashboard\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Student Dashboard","Your academic workspace");
         printf(
             "Welcome %s %s\n",
             student->first_name,
@@ -5724,11 +6157,11 @@ static void student_dashboard(int student_index)
         );
         printf("Student ID: %s\n", student->student_id);
         printf("\n");
-        printf("1. Offerings\n");
-        printf("2. Courses\n");
-        printf("3. Report card\n");
-        printf("4. Course survey\n");
-        printf("5. Log out\n");
+        ui_menu_item(1,"Offerings");
+        ui_menu_item(2,"Courses");
+        ui_menu_item(3,"Report card");
+        ui_menu_item(4,"Course survey");
+        ui_menu_item(5,"Log out");
 
         option=read_int("Enter an option: ");
 
@@ -5751,7 +6184,7 @@ static void student_dashboard(int student_index)
         }
         else if (option==5)
         {
-            printf("Student logged out successfully.\n");
+            ui_success_message("Student logged out successfully.");
             return;
         }
         else
@@ -5777,10 +6210,7 @@ static void list_offering_students(int offering_index)
 
     offering=&offerings[offering_index];
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Students in Offering\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Students in Offering",NULL);
 
     printf("Course ID: %s\n", offering->course_id);
     printf("Semester: %d\n", offering->semester);
@@ -6191,9 +6621,9 @@ static void faculty_record_grades(
         list_offering_students(offering_index);
 
         printf("\n");
-        printf("1. Record one grade\n");
-        printf("2. Import grades from CSV\n");
-        printf("3. Go back\n");
+        ui_menu_item(1,"Record one grade");
+        ui_menu_item(2,"Import grades from CSV");
+        ui_menu_item(3,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -6257,10 +6687,7 @@ static void faculty_view_surveys(
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Survey Results\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Survey Results",NULL);
     printf("Course ID: %s\n", offering->course_id);
     printf("Semester: %d\n", offering->semester);
 
@@ -6384,13 +6811,13 @@ static void faculty_manage_offering(int faculty_index)
         );
 
         printf("\n");
-        printf("1. Add capacity\n");
-        printf("2. Record grades\n");
-        printf("3. Remove offering\n");
-        printf("4. Publish a homework\n");
-        printf("5. Publish an exam\n");
-        printf("6. View survey results\n");
-        printf("7. Go back\n");
+        ui_menu_item(1,"Add capacity");
+        ui_menu_item(2,"Record grades");
+        ui_menu_item(3,"Remove offering");
+        ui_menu_item(4,"Publish a homework");
+        ui_menu_item(5,"Publish an exam");
+        ui_menu_item(6,"View survey results");
+        ui_menu_item(7,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -6586,10 +7013,7 @@ static void show_semester_report(
 
     student=&students[student_index];
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Semester Report Card\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Semester Report Card",NULL);
 
     printf(
         "Student: %s %s\n",
@@ -6833,14 +7257,11 @@ static void search_passed_courses(int student_index)
 
     student=&students[student_index];
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Search Passed Courses\n");
-    printf("----------------------------------------\n");
-    printf("1. Course name\n");
-    printf("2. Course ID\n");
-    printf("3. Semester\n");
-    printf("4. Faculty ID or name\n");
+    ui_page_header("Search Passed Courses",NULL);
+    ui_menu_item(1,"Course name");
+    ui_menu_item(2,"Course ID");
+    ui_menu_item(3,"Semester");
+    ui_menu_item(4,"Faculty ID or name");
 
     option=read_int("Enter an option: ");
 
@@ -7035,10 +7456,7 @@ static void student_report_card(int student_index)
             &gpa
         );
 
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Student Report Card\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Student Report Card",NULL);
 
         printf(
             "Student ID: %s\n",
@@ -7106,9 +7524,9 @@ static void student_report_card(int student_index)
         );
 
         printf("\n");
-        printf("1. View a semester report\n");
-        printf("2. Search passed courses\n");
-        printf("3. Go back\n");
+        ui_menu_item(1,"View a semester report");
+        ui_menu_item(2,"Search passed courses");
+        ui_menu_item(3,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -7154,10 +7572,7 @@ static void faculty_dashboard(int faculty_index)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Faculty Dashboard\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Faculty Dashboard","Courses, students and requests");
 
         printf(
             "Welcome Professor %s %s\n",
@@ -7171,11 +7586,11 @@ static void faculty_dashboard(int faculty_index)
         );
 
         printf("\n");
-        printf("1. My offerings\n");
-        printf("2. List of offerings in semester\n");
-        printf("3. Courses\n");
-        printf("4. Offer a course\n");
-        printf("5. Log out\n");
+        ui_menu_item(1,"My offerings");
+        ui_menu_item(2,"List of offerings in semester");
+        ui_menu_item(3,"Courses");
+        ui_menu_item(4,"Offer a course");
+        ui_menu_item(5,"Log out");
 
         option=read_int("Enter an option: ");
 
@@ -7185,8 +7600,8 @@ static void faculty_dashboard(int faculty_index)
             list_faculty_offerings(faculty_index);
 
             printf("\n1. Manage an offering\n");
-            printf("2. Search offerings\n");
-            printf("3. Go back\n");
+            ui_menu_item(2,"Search offerings");
+            ui_menu_item(3,"Go back");
 
             submenu_option=
                 read_int("Enter an option: ");
@@ -7216,7 +7631,7 @@ static void faculty_dashboard(int faculty_index)
             list_offerings_by_semester(semester);
 
             printf("\n1. Search offerings\n");
-            printf("2. Go back\n");
+            ui_menu_item(2,"Go back");
 
             submenu_option=read_int("Enter an option: ");
 
@@ -7263,10 +7678,7 @@ static void list_students(void)
 {
     int index;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Students List\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Students List",NULL);
 
     if (student_count==0)
     {
@@ -7346,10 +7758,7 @@ static void register_student(void)
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Register New Student\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Register New Student",NULL);
 
     read_line(
         "Student ID: ",
@@ -7746,10 +8155,7 @@ static void delete_student(void)
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Delete Student\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Delete Student",NULL);
 
     read_line(
         "Enter student ID: ",
@@ -7866,16 +8272,13 @@ static void admin_students_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Admin: Student Management\n");
-        printf("----------------------------------------\n");
-        printf("1. List students\n");
-        printf("2. Search students\n");
-        printf("3. Register one student\n");
-        printf("4. Import students from CSV\n");
-        printf("5. Delete a student\n");
-        printf("6. Go back\n");
+        ui_page_header("Admin: Student Management",NULL);
+        ui_menu_item(1,"List students");
+        ui_menu_item(2,"Search students");
+        ui_menu_item(3,"Register one student");
+        ui_menu_item(4,"Import students from CSV");
+        ui_menu_item(5,"Delete a student");
+        ui_menu_item(6,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -7923,10 +8326,7 @@ static void list_faculty(void)
     int index;
     int displayed_count=0;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Faculty Members List\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Faculty Members List",NULL);
 
     for (index=0; index<faculty_count; index++)
     {
@@ -8021,10 +8421,7 @@ static void register_faculty(void)
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Register New Faculty Member\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Register New Faculty Member",NULL);
 
     read_line(
         "Faculty ID: ",
@@ -8401,10 +8798,7 @@ static void delete_faculty(void)
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Delete Faculty Member\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Delete Faculty Member",NULL);
 
     read_line(
         "Enter faculty ID: ",
@@ -8477,17 +8871,14 @@ static void admin_faculty_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Admin: Faculty Management\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Admin: Faculty Management",NULL);
 
-        printf("1. List faculty members\n");
-        printf("2. Search faculty members\n");
-        printf("3. Register one faculty member\n");
-        printf("4. Import faculty from CSV\n");
-        printf("5. Delete a faculty member\n");
-        printf("6. Go back\n");
+        ui_menu_item(1,"List faculty members");
+        ui_menu_item(2,"Search faculty members");
+        ui_menu_item(3,"Register one faculty member");
+        ui_menu_item(4,"Import faculty from CSV");
+        ui_menu_item(5,"Delete a faculty member");
+        ui_menu_item(6,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -8535,10 +8926,7 @@ static void list_courses(void)
     int index;
     int displayed_count=0;
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Courses List\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Courses List",NULL);
 
     for (index=0; index<course_count; index++)
     {
@@ -8586,10 +8974,7 @@ static void register_course(void)
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Register New Course\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Register New Course",NULL);
 
     read_line(
         "Course ID: ",
@@ -8756,10 +9141,7 @@ static void delete_course(void)
         return;
     }
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Delete Course\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Delete Course",NULL);
 
     read_line(
         "Enter course ID: ",
@@ -8828,15 +9210,12 @@ static void admin_courses_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Admin: Course Management\n");
-        printf("----------------------------------------\n");
-        printf("1. List courses\n");
-        printf("2. Search courses\n");
-        printf("3. Register a course\n");
-        printf("4. Delete a course\n");
-        printf("5. Go back\n");
+        ui_page_header("Admin: Course Management",NULL);
+        ui_menu_item(1,"List courses");
+        ui_menu_item(2,"Search courses");
+        ui_menu_item(3,"Register a course");
+        ui_menu_item(4,"Delete a course");
+        ui_menu_item(5,"Go back");
 
         option=read_int("Enter an option: ");
 
@@ -9036,10 +9415,7 @@ static void admin_calendar_menu(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Admin: Academic Calendar\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Admin: Academic Calendar",NULL);
 
         printf(
             "Current semester: %d\n",
@@ -9074,8 +9450,8 @@ static void admin_calendar_menu(void)
             )
         );
 
-        printf("5. Start next semester\n");
-        printf("6. Go back\n");
+        ui_menu_item(5,"Start next semester");
+        ui_menu_item(6,"Go back");
 
         option=read_int("Enter an option: ");
         changed=0;
@@ -9167,19 +9543,16 @@ static void admin_dashboard(void)
     while (1)
     {
         clear_screen();
-        printf("\n");
-        printf("----------------------------------------\n");
-        printf("Admin Dashboard\n");
-        printf("----------------------------------------\n");
+        ui_page_header("Admin Dashboard","System control center");
         printf("Welcome %s\n", ADMIN_USERNAME);
         printf("\n");
-        printf("1. Academic calendar\n");
-        printf("2. Students\n");
-        printf("3. Faculty members\n");
-        printf("4. Requests\n");
-        printf("5. Offerings\n");
-        printf("6. Courses\n");
-        printf("7. Log out\n");
+        ui_menu_item(1,"Academic calendar");
+        ui_menu_item(2,"Students");
+        ui_menu_item(3,"Faculty members");
+        ui_menu_item(4,"Requests");
+        ui_menu_item(5,"Offerings");
+        ui_menu_item(6,"Courses");
+        ui_menu_item(7,"Log out");
 
         option=read_int("Enter an option: ");
 
@@ -9209,7 +9582,7 @@ static void admin_dashboard(void)
         }
         else if (option==7)
         {
-            printf("Admin logged out successfully.\n");
+            ui_success_message("Admin logged out successfully.");
             return;
         }
         else
@@ -9228,10 +9601,7 @@ static void login_student(void)
 
     clear_screen();
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Student Login\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Student Login",NULL);
 
     read_line(
         "Enter username: ",
@@ -9243,11 +9613,11 @@ static void login_student(void)
 
     if (index==-1)
     {
-        printf("Username not found.\n");
+        ui_error_message("Username not found.");
         return;
     }
 
-    read_line(
+    read_password(
         "Enter password: ",
         password,
         sizeof(password)
@@ -9255,12 +9625,12 @@ static void login_student(void)
 
     if (strcmp(password, students[index].password)!=0)
     {
-        printf("Incorrect password.\n");
+        ui_error_message("Incorrect password.");
         return;
     }
 
-    printf("\nLogin successful.\n");
-    wait_for_enter();
+    ui_success_message("Login successful.");
+    ui_loading("Opening student dashboard");
     student_dashboard(index);
 }
 
@@ -9272,10 +9642,7 @@ static void login_faculty(void)
 
     clear_screen();
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Faculty Login\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Faculty Login",NULL);
 
     read_line(
         "Enter username: ",
@@ -9287,11 +9654,11 @@ static void login_faculty(void)
 
     if (index==-1)
     {
-        printf("Username not found or account is inactive.\n");
+        ui_error_message("Username not found or account is inactive.");
         return;
     }
 
-    read_line(
+    read_password(
         "Enter password: ",
         password,
         sizeof(password)
@@ -9299,12 +9666,12 @@ static void login_faculty(void)
 
     if (strcmp(password, faculty_members[index].password)!=0)
     {
-        printf("Incorrect password.\n");
+        ui_error_message("Incorrect password.");
         return;
     }
 
-    printf("\nLogin successful.\n");
-    wait_for_enter();
+    ui_success_message("Login successful.");
+    ui_loading("Opening faculty dashboard");
     faculty_dashboard(index);
 }
 
@@ -9315,10 +9682,7 @@ static void login_admin(void)
 
     clear_screen();
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Admin Login\n");
-    printf("----------------------------------------\n");
+    ui_page_header("Admin Login",NULL);
 
     read_line(
         "Enter username: ",
@@ -9328,11 +9692,11 @@ static void login_admin(void)
 
     if (strcmp(username, ADMIN_USERNAME)!=0)
     {
-        printf("Username not found.\n");
+        ui_error_message("Username not found.");
         return;
     }
 
-    read_line(
+    read_password(
         "Enter password: ",
         password,
         sizeof(password)
@@ -9340,12 +9704,12 @@ static void login_admin(void)
 
     if (strcmp(password, ADMIN_PASSWORD)!=0)
     {
-        printf("Incorrect password.\n");
+        ui_error_message("Incorrect password.");
         return;
     }
 
-    printf("\nLogin successful.\n");
-    wait_for_enter();
+    ui_success_message("Login successful.");
+    ui_loading("Opening admin dashboard");
     admin_dashboard();
 }
 
@@ -9353,13 +9717,16 @@ int main(void)
 {
     int option;
 
+    ui_initialize();
+    ui_splash();
+
     if (!load_all())
     {
         initialize_sample_data();
 
         if (!save_all())
         {
-            printf("Warning: sample data could not be saved.\n");
+            ui_warning_message("Sample data could not be saved.");
         }
     }
 
@@ -9389,8 +9756,11 @@ int main(void)
         }
         else if (option==5)
         {
+            ui_loading("Saving changes");
             save_all();
-            printf("Goodbye.\n");
+            clear_screen();
+            ui_page_header("Session Complete",NULL);
+            ui_success_message("All changes were saved. Goodbye.");
             break;
         }
         else
@@ -9405,15 +9775,12 @@ static void show_main_menu(void)
 {
     clear_screen();
 
-    printf("\n");
-    printf("----------------------------------------\n");
-    printf("Educational Management System\n");
-    printf("----------------------------------------\n");
-    printf("1. Login as student\n");
-    printf("2. Login as faculty\n");
-    printf("3. Login as admin\n");
-    printf("4. Forgot password\n");
-    printf("5. Exit\n");
+    ui_page_header("Educational Management System","Choose a role to continue");
+    ui_menu_item(1,"Login as student");
+    ui_menu_item(2,"Login as faculty");
+    ui_menu_item(3,"Login as admin");
+    ui_menu_item(4,"Forgot password");
+    ui_menu_item(5,"Exit");
 }
 
 static void trim(char *text)
@@ -9577,7 +9944,13 @@ static int parse_csv_line(
 
 static void read_line(const char *prompt,char *output,size_t size)
 {
-    printf("%s", prompt);
+    printf(
+        "%s> %s%s",
+        ui_style(UI_ACCENT),
+        prompt,
+        ui_style(UI_RESET)
+    );
+    fflush(stdout);
 
     if (fgets(output, (int)size, stdin)==NULL)
     {
@@ -9604,6 +9977,6 @@ static int read_int(const char *prompt)
             return value;
         }
 
-        printf("Please enter a valid integer.\n");
+        ui_error_message("Please enter a valid integer.");
     }
 }
