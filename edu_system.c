@@ -200,6 +200,13 @@ static int find_faculty_index(const char *faculty_id);
 static int find_course_index(const char *course_id);
 static int find_request_index(int request_id);
 
+static int collect_offering_indices(
+    int semester,
+    const char *faculty_id,
+    int output[],
+    int max_output
+);
+
 static void print_offering(const Offering *offering, int number);
 static void list_offerings_by_semester(int semester);
 static void list_faculty_offerings(int faculty_index);
@@ -207,13 +214,16 @@ static void list_faculty_offerings(int faculty_index);
 static void search_students(void);
 static void search_faculty(void);
 static void search_courses(void);
-static void search_offerings(void);
+static void search_offerings(
+    int semester_filter,
+    const char *faculty_filter
+);
 
 static void course_catalog_menu(void);
 
-static void add_student_to_offering_admin(void);
-static void remove_student_from_offering_admin(void);
-static void add_capacity_admin_direct(void);
+static void add_student_to_offering_admin(int offering_index);
+static void remove_student_from_offering_admin(int offering_index);
+static void add_capacity_admin_direct(int offering_index);
 static void admin_offerings_menu(void);
 
 static void faculty_offer_course_request(int faculty_index);
@@ -370,12 +380,14 @@ static int prerequisites_satisfied(
 
 static void student_enroll_course(
     int student_index,
-    int selected_semester
+    int selected_semester,
+    int offering_index
 );
 
 static void student_withdraw_course(
     int student_index,
-    int selected_semester
+    int selected_semester,
+    int offering_index
 );
 static void student_offerings_menu(int student_index);
 
@@ -3134,6 +3146,51 @@ static void show_data_summary(void)
     );
 }
 
+static int collect_offering_indices(
+    int semester,
+    const char *faculty_id,
+    int output[],
+    int max_output
+)
+{
+    int index;
+    int count=0;
+
+    if (output==NULL || max_output<=0)
+    {
+        return 0;
+    }
+
+    for (index=0; index<offering_count; index++)
+    {
+        if (semester>0 &&
+            offerings[index].semester!=semester)
+        {
+            continue;
+        }
+
+        if (faculty_id!=NULL &&
+            faculty_id[0]!='\0' &&
+            strcmp(
+                offerings[index].faculty_id,
+                faculty_id
+            )!=0)
+        {
+            continue;
+        }
+
+        output[count]=index;
+        count++;
+
+        if (count>=max_output)
+        {
+            break;
+        }
+    }
+
+    return count;
+}
+
 static void print_offering(
     const Offering *offering,
     int number
@@ -3205,8 +3262,9 @@ static void print_offering(
 
 static void list_offerings_by_semester(int semester)
 {
+    int offering_indices[MAX_OFFERINGS];
+    int count;
     int index;
-    int found=0;
 
     printf("\n");
     printf("----------------------------------------\n");
@@ -3219,16 +3277,22 @@ static void list_offerings_by_semester(int semester)
         return;
     }
 
-    for (index=0; index<offering_count; index++)
+    count=collect_offering_indices(
+        semester,
+        NULL,
+        offering_indices,
+        MAX_OFFERINGS
+    );
+
+    for (index=0; index<count; index++)
     {
-        if (offerings[index].semester==semester)
-        {
-            print_offering(&offerings[index],index+1);
-            found=1;
-        }
+        print_offering(
+            &offerings[offering_indices[index]],
+            index+1
+        );
     }
 
-    if (!found)
+    if (count==0)
     {
         printf("No offerings were found for this semester.\n");
     }
@@ -3479,7 +3543,10 @@ static void search_courses(void)
     }
 }
 
-static void search_offerings(void)
+static void search_offerings(
+    int semester_filter,
+    const char *faculty_filter
+)
 {
     char key[STR_SIZE];
     char faculty_name[STR_SIZE*2+2];
@@ -3489,11 +3556,18 @@ static void search_offerings(void)
     int faculty_index;
     int found=0;
     int matches;
+    int result_number=0;
 
     printf("\n");
     printf("----------------------------------------\n");
     printf("Search Course Offerings\n");
     printf("----------------------------------------\n");
+
+    if (semester_filter>0)
+    {
+        printf("Semester: %d\n", semester_filter);
+    }
+
     printf("1. Course name\n");
     printf("2. Course ID\n");
     printf("3. Faculty ID or name\n");
@@ -3518,6 +3592,22 @@ static void search_offerings(void)
 
     for (index=0; index<offering_count; index++)
     {
+        if (semester_filter>0 &&
+            offerings[index].semester!=semester_filter)
+        {
+            continue;
+        }
+
+        if (faculty_filter!=NULL &&
+            faculty_filter[0]!='\0' &&
+            strcmp(
+                offerings[index].faculty_id,
+                faculty_filter
+            )!=0)
+        {
+            continue;
+        }
+
         matches=0;
 
         course_index=find_course_index(offerings[index].course_id);
@@ -3559,7 +3649,12 @@ static void search_offerings(void)
 
         if (matches)
         {
-            print_offering(&offerings[index],index+1);
+            result_number++;
+
+            print_offering(
+                &offerings[index],
+                result_number
+            );
 
             found=1;
         }
@@ -3606,24 +3701,11 @@ static void course_catalog_menu(void)
     }
 }
 
-static void add_student_to_offering_admin(void)
+static void add_student_to_offering_admin(int offering_index)
 {
     Offering *offering;
     Enrollment *enrollment;
     char student_id[SMALL_SIZE];
-    int offering_number;
-    int offering_index;
-
-    if (offering_count==0)
-    {
-        printf("No course offerings are available.\n");
-        return;
-    }
-
-    offering_number=
-        read_int("Enter offering number: ");
-
-    offering_index=offering_number-1;
 
     if (offering_index<0 ||
         offering_index>=offering_count)
@@ -3703,25 +3785,12 @@ static void add_student_to_offering_admin(void)
     );
 }
 
-static void remove_student_from_offering_admin(void)
+static void remove_student_from_offering_admin(int offering_index)
 {
     Offering *offering;
     char student_id[SMALL_SIZE];
-    int offering_number;
-    int offering_index;
     int enrollment_index;
     int index;
-
-    if (offering_count==0)
-    {
-        printf("No course offerings are available.\n");
-        return;
-    }
-
-    offering_number=
-        read_int("Enter offering number: ");
-
-    offering_index=offering_number-1;
 
     if (offering_index<0 ||
         offering_index>=offering_count)
@@ -3783,23 +3852,10 @@ static void remove_student_from_offering_admin(void)
     );
 }
 
-static void add_capacity_admin_direct(void)
+static void add_capacity_admin_direct(int offering_index)
 {
     Offering *offering;
-    int offering_number;
-    int offering_index;
     int amount;
-
-    if (offering_count==0)
-    {
-        printf("No course offerings are available.\n");
-        return;
-    }
-
-    offering_number=
-        read_int("Enter offering number: ");
-
-    offering_index=offering_number-1;
 
     if (offering_index<0 ||
         offering_index>=offering_count)
@@ -3845,6 +3901,10 @@ static void add_capacity_admin_direct(void)
 
 static void admin_offerings_menu(void)
 {
+    int offering_indices[MAX_OFFERINGS];
+    int displayed_count;
+    int offering_number;
+    int offering_index;
     int semester;
     int option;
 
@@ -3876,6 +3936,13 @@ static void admin_offerings_menu(void)
 
         while (1)
         {
+            displayed_count=collect_offering_indices(
+                semester,
+                NULL,
+                offering_indices,
+                MAX_OFFERINGS
+            );
+
             list_offerings_by_semester(semester);
 
             printf("\n");
@@ -3895,19 +3962,50 @@ static void admin_offerings_menu(void)
 
             if (option==1)
             {
-                search_offerings();
+                search_offerings(semester,NULL);
             }
-            else if (option==2)
+            else if (option>=2 && option<=4)
             {
-                add_student_to_offering_admin();
-            }
-            else if (option==3)
-            {
-                remove_student_from_offering_admin();
-            }
-            else if (option==4)
-            {
-                add_capacity_admin_direct();
+                if (displayed_count==0)
+                {
+                    printf(
+                        "No course offerings are available "
+                        "in this semester.\n"
+                    );
+                    continue;
+                }
+
+                offering_number=
+                    read_int("Enter offering number: ");
+
+                if (offering_number<1 ||
+                    offering_number>displayed_count)
+                {
+                    printf("Offering not found.\n");
+                    continue;
+                }
+
+                offering_index=
+                    offering_indices[offering_number-1];
+
+                if (option==2)
+                {
+                    add_student_to_offering_admin(
+                        offering_index
+                    );
+                }
+                else if (option==3)
+                {
+                    remove_student_from_offering_admin(
+                        offering_index
+                    );
+                }
+                else
+                {
+                    add_capacity_admin_direct(
+                        offering_index
+                    );
+                }
             }
             else if (option==5)
             {
@@ -3926,8 +4024,9 @@ static void admin_offerings_menu(void)
 
 static void list_faculty_offerings(int faculty_index)
 {
+    int offering_indices[MAX_OFFERINGS];
+    int count;
     int index;
-    int found=0;
     Faculty *faculty=&faculty_members[faculty_index];
 
     printf("\n");
@@ -3935,17 +4034,22 @@ static void list_faculty_offerings(int faculty_index)
     printf("My Course Offerings\n");
     printf("----------------------------------------\n");
 
-    for (index=0; index<offering_count; index++)
-    {
-        if (strcmp(offerings[index].faculty_id,faculty->faculty_id)==0)
-        {
-            print_offering(&offerings[index],index+1);
+    count=collect_offering_indices(
+        0,
+        faculty->faculty_id,
+        offering_indices,
+        MAX_OFFERINGS
+    );
 
-            found=1;
-        }
+    for (index=0; index<count; index++)
+    {
+        print_offering(
+            &offerings[offering_indices[index]],
+            index+1
+        );
     }
 
-    if (!found)
+    if (count==0)
     {
         printf("You do not have any approved offerings.\n");
     }
@@ -4891,14 +4995,16 @@ static void admin_requests_menu(void)
     }
 }
 
-static void student_enroll_course(int student_index,int selected_semester)
+static void student_enroll_course(
+    int student_index,
+    int selected_semester,
+    int offering_index
+)
 {
     Student *student;
     Course *course;
     Offering *offering;
     Enrollment *enrollment;
-    int offering_number;
-    int offering_index;
     int course_index;
 
     student=&students[student_index];
@@ -4919,17 +5025,6 @@ static void student_enroll_course(int student_index,int selected_semester)
         printf("Unit selection is not active. ""You cannot enroll now.\n");
         return;
         }
-
-    if (offering_count==0)
-    {
-        printf("No course offerings are available.\n");
-        return;
-    }
-
-    offering_number=
-        read_int("Enter offering number: ");
-
-    offering_index=offering_number-1;
 
     if (offering_index<0 ||
         offering_index>=offering_count)
@@ -5030,12 +5125,14 @@ static void student_enroll_course(int student_index,int selected_semester)
     );
 }
 
-static void student_withdraw_course(int student_index,int selected_semester)
+static void student_withdraw_course(
+    int student_index,
+    int selected_semester,
+    int offering_index
+)
 {
     Student *student;
     Offering *offering;
-    int offering_number;
-    int offering_index;
     int enrollment_index;
     int index;
 
@@ -5066,11 +5163,6 @@ static void student_withdraw_course(int student_index,int selected_semester)
 
         return;
     }
-
-    offering_number=
-        read_int("Enter offering number to withdraw: ");
-
-    offering_index=offering_number-1;
 
     if (offering_index<0 ||
         offering_index>=offering_count)
@@ -5139,6 +5231,10 @@ static void student_withdraw_course(int student_index,int selected_semester)
 
 static void student_offerings_menu(int student_index)
 {
+    int offering_indices[MAX_OFFERINGS];
+    int displayed_count;
+    int offering_number;
+    int offering_index;
     int semester;
     int option;
 
@@ -5168,6 +5264,13 @@ static void student_offerings_menu(int student_index)
 
         while (1)
         {
+            displayed_count=collect_offering_indices(
+                semester,
+                NULL,
+                offering_indices,
+                MAX_OFFERINGS
+            );
+
             list_offerings_by_semester(semester);
 
             printf("\n");
@@ -5180,15 +5283,48 @@ static void student_offerings_menu(int student_index)
 
             if (option==1)
             {
-                search_offerings();
+                search_offerings(semester,NULL);
             }
-            else if (option==2)
+            else if (option==2 || option==3)
             {
-                student_enroll_course(student_index,semester);
-            }
-            else if (option==3)
-            {
-                student_withdraw_course(student_index,semester);
+                if (displayed_count==0)
+                {
+                    printf(
+                        "No course offerings are available "
+                        "in this semester.\n"
+                    );
+                    continue;
+                }
+
+                offering_number=
+                    read_int("Enter offering number: ");
+
+                if (offering_number<1 ||
+                    offering_number>displayed_count)
+                {
+                    printf("Offering not found.\n");
+                    continue;
+                }
+
+                offering_index=
+                    offering_indices[offering_number-1];
+
+                if (option==2)
+                {
+                    student_enroll_course(
+                        student_index,
+                        semester,
+                        offering_index
+                    );
+                }
+                else
+                {
+                    student_withdraw_course(
+                        student_index,
+                        semester,
+                        offering_index
+                    );
+                }
             }
             else if (option==4)
             {
@@ -6038,35 +6174,46 @@ static void faculty_view_surveys(
 static void faculty_manage_offering(int faculty_index)
 {
     Faculty *faculty;
+    int offering_indices[MAX_OFFERINGS];
+    int displayed_count;
     int offering_number;
     int offering_index;
     int option;
 
     faculty=&faculty_members[faculty_index];
 
+    displayed_count=collect_offering_indices(
+        0,
+        faculty->faculty_id,
+        offering_indices,
+        MAX_OFFERINGS
+    );
+
     list_faculty_offerings(faculty_index);
+
+    if (displayed_count==0)
+    {
+        return;
+    }
 
     offering_number=
         read_int("Enter offering number: ");
 
-    offering_index=offering_number-1;
-
-    if (offering_index<0 ||
-        offering_index>=offering_count ||
-        strcmp(
-            offerings[offering_index].faculty_id,
-            faculty->faculty_id
-        )!=0)
+    if (offering_number<1 ||
+        offering_number>displayed_count)
     {
         printf("Offering not found.\n");
         return;
     }
 
+    offering_index=
+        offering_indices[offering_number-1];
+
     while (1)
     {
         print_offering(
             &offerings[offering_index],
-            offering_index+1
+            offering_number
         );
 
         printf("\n");
@@ -6103,15 +6250,15 @@ static void faculty_manage_offering(int faculty_index)
         else if (option==4)
         {
             printf(
-                "Homework publishing is a bonus LMS "
-                "feature. Placeholder created.\n"
+                "Homework publishing is an optional "
+                "LMS feature and is not implemented.\n"
             );
         }
         else if (option==5)
         {
             printf(
-                "Exam publishing is a bonus LMS "
-                "feature. Placeholder created.\n"
+                "Exam publishing is an optional "
+                "LMS feature and is not implemented.\n"
             );
         }
         else if (option==6)
@@ -6801,7 +6948,7 @@ static void faculty_dashboard(int faculty_index)
             }
             else if (submenu_option==2)
             {
-                search_offerings();
+                search_offerings(0,faculty->faculty_id);
             }
             else if (submenu_option!=3)
             {
@@ -6821,7 +6968,7 @@ static void faculty_dashboard(int faculty_index)
 
             if (submenu_option==1)
             {
-                search_offerings();
+                search_offerings(semester,NULL);
             }
             else if (submenu_option!=2)
             {
