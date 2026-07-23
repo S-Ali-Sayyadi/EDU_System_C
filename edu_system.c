@@ -207,6 +207,11 @@ static int collect_offering_indices(
     int max_output
 );
 
+static void sort_offering_indices_by_semester(
+    int indices[],
+    int count
+);
+
 static void print_offering(const Offering *offering, int number);
 static void list_offerings_by_semester(int semester);
 static void list_faculty_offerings(int faculty_index);
@@ -3191,6 +3196,30 @@ static int collect_offering_indices(
     return count;
 }
 
+static void sort_offering_indices_by_semester(
+    int indices[],
+    int count
+)
+{
+    int first;
+    int second;
+    int temporary;
+
+    for (first=0; first<count-1; first++)
+    {
+        for (second=first+1; second<count; second++)
+        {
+            if (offerings[indices[first]].semester<
+                offerings[indices[second]].semester)
+            {
+                temporary=indices[first];
+                indices[first]=indices[second];
+                indices[second]=temporary;
+            }
+        }
+    }
+}
+
 static void print_offering(
     const Offering *offering,
     int number
@@ -4039,6 +4068,11 @@ static void list_faculty_offerings(int faculty_index)
         faculty->faculty_id,
         offering_indices,
         MAX_OFFERINGS
+    );
+
+    sort_offering_indices_by_semester(
+        offering_indices,
+        count
     );
 
     for (index=0; index<count; index++)
@@ -6187,6 +6221,11 @@ static void faculty_manage_offering(int faculty_index)
         faculty->faculty_id,
         offering_indices,
         MAX_OFFERINGS
+    );
+
+    sort_offering_indices_by_semester(
+        offering_indices,
+        displayed_count
     );
 
     list_faculty_offerings(faculty_index);
