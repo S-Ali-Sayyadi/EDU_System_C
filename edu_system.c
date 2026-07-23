@@ -38,11 +38,13 @@
 #define UI_MAX_WIDTH 76
 #define UI_RESET "\033[0m"
 #define UI_BOLD "\033[1m"
-#define UI_PRIMARY "\033[96m"
-#define UI_ACCENT "\033[94m"
+#define UI_PRIMARY "\033[38;2;0;127;255m"
+#define UI_HEADER "\033[38;2;129;178;20m"
+#define UI_ACCENT "\033[38;2;0;127;255m"
 #define UI_SUCCESS "\033[92m"
 #define UI_WARNING "\033[93m"
 #define UI_ERROR "\033[91m"
+#define UI_INPUT "\033[38;2;255;204;41m"
 #define UI_MUTED "\033[90m"
 
 typedef struct
@@ -3406,7 +3408,7 @@ static void ui_box_text(
     left_padding=(inner_width-length)/2;
     right_padding=inner_width-length-left_padding;
 
-    printf("%s|%s",ui_style(UI_PRIMARY),ui_style(UI_RESET));
+    printf("%s|%s",ui_style(UI_HEADER),ui_style(UI_RESET));
     ui_repeat(' ',left_padding);
     printf(
         "%s%s%s%s",
@@ -3416,7 +3418,7 @@ static void ui_box_text(
         ui_style(UI_RESET)
     );
     ui_repeat(' ',right_padding);
-    printf("%s|%s\n",ui_style(UI_PRIMARY),ui_style(UI_RESET));
+    printf("%s|%s\n",ui_style(UI_HEADER),ui_style(UI_RESET));
 }
 
 static void ui_page_header(
@@ -3427,14 +3429,14 @@ static void ui_page_header(
     int width=ui_console_width();
     int inner_width=width-2;
 
-    printf("\n%s+",ui_style(UI_PRIMARY));
+    printf("\n%s+",ui_style(UI_HEADER));
     ui_repeat('=',inner_width);
     printf("+%s\n",ui_style(UI_RESET));
 
     ui_box_text(
         title,
         inner_width,
-        UI_PRIMARY,
+        UI_HEADER,
         1
     );
 
@@ -3448,7 +3450,7 @@ static void ui_page_header(
         );
     }
 
-    printf("%s+",ui_style(UI_PRIMARY));
+    printf("%s+",ui_style(UI_HEADER));
     ui_repeat('-',inner_width);
     printf("+%s\n\n",ui_style(UI_RESET));
 }
@@ -3600,10 +3602,11 @@ static void read_password(
     }
 
     printf(
-        "%s> %s%s",
+        "%s> %s%s%s",
         ui_style(UI_ACCENT),
         prompt,
-        ui_style(UI_RESET)
+        ui_style(UI_RESET),
+        ui_style(UI_INPUT)
     );
     fflush(stdout);
 
@@ -3698,7 +3701,10 @@ static void read_password(
 #endif
 
     output[length]='\0';
-    putchar('\n');
+    printf(
+        "%s\n",
+        ui_style(UI_RESET)
+    );
 }
 
 static int collect_offering_indices(
@@ -9765,7 +9771,8 @@ int main(void)
         }
         else
         {
-            printf("Invalid option. Please try again.\n");
+            ui_error_message("Invalid option. Please try again.");
+            wait_for_enter();
         }
     }
     return 0;
@@ -9945,19 +9952,29 @@ static int parse_csv_line(
 static void read_line(const char *prompt,char *output,size_t size)
 {
     printf(
-        "%s> %s%s",
+        "%s> %s%s%s",
         ui_style(UI_ACCENT),
         prompt,
-        ui_style(UI_RESET)
+        ui_style(UI_RESET),
+        ui_style(UI_INPUT)
     );
     fflush(stdout);
 
     if (fgets(output, (int)size, stdin)==NULL)
     {
+        printf(
+            "%s",
+            ui_style(UI_RESET)
+        );
         output[0]='\0';
         clearerr(stdin);
         return;
-}
+    }
+
+    printf(
+        "%s",
+        ui_style(UI_RESET)
+    );
     output[strcspn(output, "\n")]='\0';
     trim(output);
 }
