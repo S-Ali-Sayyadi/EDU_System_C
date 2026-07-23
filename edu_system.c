@@ -6624,6 +6624,7 @@ static void faculty_record_grades(
 
     while (1)
     {
+        clear_screen();
         list_offering_students(offering_index);
 
         printf("\n");
@@ -6639,12 +6640,14 @@ static void faculty_record_grades(
                 faculty_index,
                 offering_index
             );
+            wait_for_enter();
         }
         else if (option==2)
         {
             record_grades_from_file(
                 offering_index
             );
+            wait_for_enter();
         }
         else if (option==3)
         {
@@ -6652,9 +6655,10 @@ static void faculty_record_grades(
         }
         else
         {
-            printf(
-                "Invalid option. Please try again.\n"
+            ui_error_message(
+                "Invalid option. Please try again."
             );
+            wait_for_enter();
         }
     }
 }
