@@ -6423,6 +6423,12 @@ static void show_semester_report(
     Offering *offering;
     Enrollment *enrollment;
 
+    char course_name[STR_SIZE];
+    char instructor_name[STR_SIZE*2+6];
+    char units_text[SMALL_SIZE];
+    char grade_text[SMALL_SIZE];
+    char passed_text[SMALL_SIZE];
+
     int offering_index;
     int enrollment_index;
     int course_index;
@@ -6431,9 +6437,13 @@ static void show_semester_report(
     int enrolled_count;
     int passed_count;
     int failed_count;
+    int overall_enrolled_count;
+    int overall_passed_count;
+    int overall_failed_count;
     int found=0;
 
-    double gpa;
+    double semester_gpa;
+    double overall_gpa;
 
     if (semester<=0)
     {
@@ -6465,6 +6475,23 @@ static void show_semester_report(
     printf(
         "Semester: %d\n",
         semester
+    );
+
+    printf("\n");
+    printf(
+        "+------------------------------+------------+-------+--------------+------------+--------------------------+\n"
+    );
+    printf(
+        "| %-28s | %-10s | %-5s | %-12s | %-10s | %-24s |\n",
+        "Course name",
+        "Course ID",
+        "Units",
+        "Grade",
+        "Passed",
+        "Instructor"
+    );
+    printf(
+        "+------------------------------+------------+-------+--------------+------------+--------------------------+\n"
     );
 
     for (
@@ -6501,34 +6528,46 @@ static void show_semester_report(
             offering->faculty_id
         );
 
-        printf("\n");
-        printf(
-            "Course ID: %s\n",
-            offering->course_id
+        copy_str(
+            course_name,
+            "Unknown",
+            sizeof(course_name)
+        );
+
+        copy_str(
+            units_text,
+            "Unknown",
+            sizeof(units_text)
         );
 
         if (course_index!=-1)
         {
-            printf(
-                "Course name: %s\n",
-                courses[course_index].name
+            copy_str(
+                course_name,
+                courses[course_index].name,
+                sizeof(course_name)
             );
 
-            printf(
-                "Units: %d\n",
+            snprintf(
+                units_text,
+                sizeof(units_text),
+                "%d",
                 courses[course_index].units
             );
         }
-        else
-        {
-            printf("Course name: Unknown\n");
-            printf("Units: Unknown\n");
-        }
+
+        copy_str(
+            instructor_name,
+            "Unknown",
+            sizeof(instructor_name)
+        );
 
         if (faculty_index!=-1)
         {
-            printf(
-                "Instructor: Dr. %s %s\n",
+            snprintf(
+                instructor_name,
+                sizeof(instructor_name),
+                "Dr. %s %s",
                 faculty_members[
                     faculty_index
                 ].first_name,
@@ -6537,33 +6576,55 @@ static void show_semester_report(
                 ].last_name
             );
         }
-        else
-        {
-            printf("Instructor: Unknown\n");
-        }
 
         if (enrollment->grade<0)
         {
-            printf("Grade: Not recorded\n");
-            printf("Passed: Not available\n");
+            copy_str(
+                grade_text,
+                "Not recorded",
+                sizeof(grade_text)
+            );
+
+            copy_str(
+                passed_text,
+                "N/A",
+                sizeof(passed_text)
+            );
         }
         else
         {
-            printf(
-                "Grade: %.2f\n",
+            snprintf(
+                grade_text,
+                sizeof(grade_text),
+                "%.2f",
                 enrollment->grade
             );
 
-            printf(
-                "Passed: %s\n",
+            copy_str(
+                passed_text,
                 enrollment->grade>=PASSING_GRADE
                     ? "Yes"
-                    : "No"
+                    : "No",
+                sizeof(passed_text)
             );
         }
 
+        printf(
+            "| %-28.28s | %-10.10s | %-5.5s | %-12.12s | %-10.10s | %-24.24s |\n",
+            course_name,
+            offering->course_id,
+            units_text,
+            grade_text,
+            passed_text,
+            instructor_name
+        );
+
         found=1;
     }
+
+    printf(
+        "+------------------------------+------------+-------+--------------+------------+--------------------------+\n"
+    );
 
     if (!found)
     {
@@ -6581,7 +6642,16 @@ static void show_semester_report(
         &enrolled_count,
         &passed_count,
         &failed_count,
-        &gpa
+        &semester_gpa
+    );
+
+    calculate_student_gpa(
+        student->student_id,
+        0,
+        &overall_enrolled_count,
+        &overall_passed_count,
+        &overall_failed_count,
+        &overall_gpa
     );
 
     printf("\nSemester summary:\n");
@@ -6603,8 +6673,14 @@ static void show_semester_report(
 
     printf(
         "Semester GPA: %.2f\n",
-        gpa
+        semester_gpa
     );
+
+    printf(
+        "Cumulative GPA: %.2f\n",
+        overall_gpa
+    );
+
 }
 
 static void search_passed_courses(int student_index)
