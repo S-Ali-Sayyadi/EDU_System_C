@@ -351,6 +351,7 @@ static void enroll_seed(
 );
 
 static void initialize_sample_data(void);
+static void clear_screen(void);
 static void wait_for_enter(void);
 
 static void list_students(void);
@@ -900,6 +901,8 @@ static void recover_student_password(void)
     char new_password[STR_SIZE];
     int student_index;
 
+    clear_screen();
+
     printf("\n");
     printf("----------------------------------------\n");
     printf("Student Password Recovery\n");
@@ -977,6 +980,8 @@ static void recover_faculty_password(void)
     char new_password[STR_SIZE];
     int faculty_index;
 
+    clear_screen();
+
     printf("\n");
     printf("----------------------------------------\n");
     printf("Faculty Password Recovery\n");
@@ -1053,6 +1058,7 @@ static void forgot_password_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Password Recovery\n");
@@ -1066,10 +1072,12 @@ static void forgot_password_menu(void)
         if (option==1)
         {
             recover_student_password();
+            wait_for_enter();
         }
         else if (option==2)
         {
             recover_faculty_password();
+            wait_for_enter();
         }
         else if (option==3)
         {
@@ -1078,6 +1086,7 @@ static void forgot_password_menu(void)
         else
         {
             printf("Invalid option. Please try again.\n");
+            wait_for_enter();
         }
     }
 }
@@ -3199,6 +3208,16 @@ static void initialize_sample_data(void)
     calendar_state.grade_recording=PHASE_NOT_STARTED;
 }
 
+static void clear_screen(void)
+{
+#ifdef _WIN32
+    system("cls");
+#else
+    printf("\033[2J\033[H");
+    fflush(stdout);
+#endif
+}
+
 static void wait_for_enter(void)
 {
     char line[8];
@@ -3770,6 +3789,7 @@ static void course_catalog_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Course Catalog\n");
@@ -3797,6 +3817,7 @@ static void course_catalog_menu(void)
         else
         {
             printf("Invalid option. Please try again.\n");
+            wait_for_enter();
         }
     }
 }
@@ -4010,6 +4031,7 @@ static void admin_offerings_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Admin: Offering Management\n");
@@ -4031,11 +4053,14 @@ static void admin_offerings_menu(void)
                 "Semester number must be "
                 "greater than zero.\n"
             );
+            wait_for_enter();
             continue;
         }
 
         while (1)
         {
+            clear_screen();
+
             displayed_count=collect_offering_indices(
                 semester,
                 NULL,
@@ -4063,6 +4088,7 @@ static void admin_offerings_menu(void)
             if (option==1)
             {
                 search_offerings(semester,NULL);
+                wait_for_enter();
             }
             else if (option>=2 && option<=4)
             {
@@ -4072,6 +4098,7 @@ static void admin_offerings_menu(void)
                         "No course offerings are available "
                         "in this semester.\n"
                     );
+                    wait_for_enter();
                     continue;
                 }
 
@@ -4082,6 +4109,7 @@ static void admin_offerings_menu(void)
                     offering_number>displayed_count)
                 {
                     printf("Offering not found.\n");
+                    wait_for_enter();
                     continue;
                 }
 
@@ -4106,6 +4134,8 @@ static void admin_offerings_menu(void)
                         offering_index
                     );
                 }
+
+                wait_for_enter();
             }
             else if (option==5)
             {
@@ -4117,6 +4147,7 @@ static void admin_offerings_menu(void)
                     "Invalid option. "
                     "Please try again.\n"
                 );
+                wait_for_enter();
             }
         }
     }
@@ -5063,6 +5094,7 @@ static void admin_requests_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Admin: Request Management\n");
@@ -5078,16 +5110,19 @@ static void admin_requests_menu(void)
         if (option==1)
         {
             list_requests();
+            wait_for_enter();
         }
         else if (option==2)
         {
             list_requests();
             approve_request();
+            wait_for_enter();
         }
         else if (option==3)
         {
             list_requests();
             reject_request();
+            wait_for_enter();
         }
         else if (option==4)
         {
@@ -5098,6 +5133,7 @@ static void admin_requests_menu(void)
             printf(
                 "Invalid option. Please try again.\n"
             );
+            wait_for_enter();
         }
     }
 }
@@ -5347,6 +5383,7 @@ static void student_offerings_menu(int student_index)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Student: Offerings\n");
@@ -5366,11 +5403,14 @@ static void student_offerings_menu(int student_index)
             printf(
                 "Semester number must be greater than zero.\n"
             );
+            wait_for_enter();
             continue;
         }
 
         while (1)
         {
+            clear_screen();
+
             displayed_count=collect_offering_indices(
                 semester,
                 NULL,
@@ -5391,6 +5431,7 @@ static void student_offerings_menu(int student_index)
             if (option==1)
             {
                 search_offerings(semester,NULL);
+                wait_for_enter();
             }
             else if (option==2 || option==3)
             {
@@ -5400,6 +5441,7 @@ static void student_offerings_menu(int student_index)
                         "No course offerings are available "
                         "in this semester.\n"
                     );
+                    wait_for_enter();
                     continue;
                 }
 
@@ -5410,6 +5452,7 @@ static void student_offerings_menu(int student_index)
                     offering_number>displayed_count)
                 {
                     printf("Offering not found.\n");
+                    wait_for_enter();
                     continue;
                 }
 
@@ -5432,6 +5475,8 @@ static void student_offerings_menu(int student_index)
                         offering_index
                     );
                 }
+
+                wait_for_enter();
             }
             else if (option==4)
             {
@@ -5442,6 +5487,7 @@ static void student_offerings_menu(int student_index)
                 printf(
                     "Invalid option. Please try again.\n"
                 );
+                wait_for_enter();
             }
         }
     }
@@ -5462,6 +5508,8 @@ static void student_course_survey(int student_index)
     int score;
     int index;
     int found=0;
+
+    clear_screen();
 
     student=&students[student_index];
 
@@ -5664,6 +5712,7 @@ static void student_dashboard(int student_index)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Student Dashboard\n");
@@ -5698,6 +5747,7 @@ static void student_dashboard(int student_index)
         else if (option==4)
         {
             student_course_survey(student_index);
+            wait_for_enter();
         }
         else if (option==5)
         {
@@ -5707,6 +5757,7 @@ static void student_dashboard(int student_index)
         else
         {
             printf("Invalid option. Please try again.\n");
+            wait_for_enter();
         }
     }
 }
@@ -6301,6 +6352,8 @@ static void faculty_manage_offering(int faculty_index)
         displayed_count
     );
 
+    clear_screen();
+
     list_faculty_offerings(faculty_index);
 
     if (displayed_count==0)
@@ -6315,6 +6368,7 @@ static void faculty_manage_offering(int faculty_index)
         offering_number>displayed_count)
     {
         printf("Offering not found.\n");
+        wait_for_enter();
         return;
     }
 
@@ -6323,6 +6377,7 @@ static void faculty_manage_offering(int faculty_index)
 
     while (1)
     {
+        clear_screen();
         print_offering(
             &offerings[offering_index],
             offering_number
@@ -6390,6 +6445,8 @@ static void faculty_manage_offering(int faculty_index)
                 "Invalid option. Please try again.\n"
             );
         }
+
+        wait_for_enter();
     }
 }
 
@@ -6968,6 +7025,7 @@ static void student_report_card(int student_index)
 
     while (1)
     {
+        clear_screen();
         calculate_student_gpa(
             student->student_id,
             0,
@@ -7063,10 +7121,12 @@ static void student_report_card(int student_index)
                 student_index,
                 semester
             );
+            wait_for_enter();
         }
         else if (option==2)
         {
             search_passed_courses(student_index);
+            wait_for_enter();
         }
         else if (option==3)
         {
@@ -7077,6 +7137,7 @@ static void student_report_card(int student_index)
             printf(
                 "Invalid option. Please try again.\n"
             );
+            wait_for_enter();
         }
     }
 }
@@ -7092,6 +7153,7 @@ static void faculty_dashboard(int faculty_index)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Faculty Dashboard\n");
@@ -7119,6 +7181,7 @@ static void faculty_dashboard(int faculty_index)
 
         if (option==1)
         {
+            clear_screen();
             list_faculty_offerings(faculty_index);
 
             printf("\n1. Manage an offering\n");
@@ -7137,16 +7200,19 @@ static void faculty_dashboard(int faculty_index)
             else if (submenu_option==2)
             {
                 search_offerings(0,faculty->faculty_id);
+                wait_for_enter();
             }
             else if (submenu_option!=3)
             {
                 printf("Invalid option.\n");
+                wait_for_enter();
             }
         }
         else if (option==2)
         {
             semester=read_int("Enter semester number: ");
 
+            clear_screen();
             list_offerings_by_semester(semester);
 
             printf("\n1. Search offerings\n");
@@ -7157,10 +7223,12 @@ static void faculty_dashboard(int faculty_index)
             if (submenu_option==1)
             {
                 search_offerings(semester,NULL);
+                wait_for_enter();
             }
             else if (submenu_option!=2)
             {
                 printf("Invalid option.\n");
+                wait_for_enter();
             }
         }
         else if (option==3)
@@ -7172,6 +7240,7 @@ static void faculty_dashboard(int faculty_index)
             faculty_offer_course_request(
                 faculty_index
             );
+            wait_for_enter();
         }
         else if (option==5)
         {
@@ -7185,6 +7254,7 @@ static void faculty_dashboard(int faculty_index)
             printf(
                 "Invalid option. Please try again.\n"
             );
+            wait_for_enter();
         }
     }
 }
@@ -7795,6 +7865,7 @@ static void admin_students_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Admin: Student Management\n");
@@ -7842,6 +7913,7 @@ static void admin_students_menu(void)
             printf(
                 "Invalid option. Please try again.\n"
             );
+            wait_for_enter();
         }
     }
 }
@@ -8404,6 +8476,7 @@ static void admin_faculty_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Admin: Faculty Management\n");
@@ -8452,6 +8525,7 @@ static void admin_faculty_menu(void)
             printf(
                 "Invalid option. Please try again.\n"
             );
+            wait_for_enter();
         }
     }
 }
@@ -8753,6 +8827,7 @@ static void admin_courses_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Admin: Course Management\n");
@@ -8794,6 +8869,7 @@ static void admin_courses_menu(void)
             printf(
                 "Invalid option. Please try again.\n"
             );
+            wait_for_enter();
         }
     }
 }
@@ -8959,6 +9035,7 @@ static void admin_calendar_menu(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Admin: Academic Calendar\n");
@@ -9078,6 +9155,8 @@ static void admin_calendar_menu(void)
         {
             save_all();
         }
+
+        wait_for_enter();
     }
 }
 
@@ -9087,6 +9166,7 @@ static void admin_dashboard(void)
 
     while (1)
     {
+        clear_screen();
         printf("\n");
         printf("----------------------------------------\n");
         printf("Admin Dashboard\n");
@@ -9135,6 +9215,7 @@ static void admin_dashboard(void)
         else
         {
             printf("Invalid option. Please try again.\n");
+            wait_for_enter();
         }
     }
 }
@@ -9144,6 +9225,8 @@ static void login_student(void)
     char username[SMALL_SIZE];
     char password[STR_SIZE];
     int index;
+
+    clear_screen();
 
     printf("\n");
     printf("----------------------------------------\n");
@@ -9177,6 +9260,7 @@ static void login_student(void)
     }
 
     printf("\nLogin successful.\n");
+    wait_for_enter();
     student_dashboard(index);
 }
 
@@ -9185,6 +9269,8 @@ static void login_faculty(void)
     char username[SMALL_SIZE];
     char password[STR_SIZE];
     int index;
+
+    clear_screen();
 
     printf("\n");
     printf("----------------------------------------\n");
@@ -9218,6 +9304,7 @@ static void login_faculty(void)
     }
 
     printf("\nLogin successful.\n");
+    wait_for_enter();
     faculty_dashboard(index);
 }
 
@@ -9225,6 +9312,8 @@ static void login_admin(void)
 {
     char username[SMALL_SIZE];
     char password[STR_SIZE];
+
+    clear_screen();
 
     printf("\n");
     printf("----------------------------------------\n");
@@ -9256,6 +9345,7 @@ static void login_admin(void)
     }
 
     printf("\nLogin successful.\n");
+    wait_for_enter();
     admin_dashboard();
 }
 
@@ -9313,6 +9403,8 @@ int main(void)
 
 static void show_main_menu(void)
 {
+    clear_screen();
+
     printf("\n");
     printf("----------------------------------------\n");
     printf("Educational Management System\n");
