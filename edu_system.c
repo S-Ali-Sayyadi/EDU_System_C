@@ -351,7 +351,7 @@ static void enroll_seed(
 );
 
 static void initialize_sample_data(void);
-static void show_data_summary(void);
+static void wait_for_enter(void);
 
 static void list_students(void);
 static void register_student(void);
@@ -3199,21 +3199,14 @@ static void initialize_sample_data(void)
     calendar_state.grade_recording=PHASE_NOT_STARTED;
 }
 
-static void show_data_summary(void)
+static void wait_for_enter(void)
 {
-    printf("\nCurrent data summary:\n");
+    char line[8];
 
-    printf(
-        "Students: %d | Faculty: %d | Courses: %d\n",
-        student_count,
-        faculty_count,
-        course_count
-    );
-
-    printf(
-        "Offerings: %d | Requests: %d\n",
-        offering_count,
-        request_count
+    read_line(
+        "Press Enter to continue...",
+        line,
+        sizeof(line)
     );
 }
 
@@ -3790,10 +3783,12 @@ static void course_catalog_menu(void)
         if (option==1)
         {
             list_courses();
+            wait_for_enter();
         }
         else if (option==2)
         {
             search_courses();
+            wait_for_enter();
         }
         else if (option==3)
         {
@@ -7218,7 +7213,7 @@ static void list_students(void)
             students[index].last_name
         );
         printf(
-            "Student ID: %s\n",
+            "Student ID / Username: %s\n",
             students[index].student_id
         );
         printf(
@@ -7244,6 +7239,26 @@ static void list_students(void)
         printf(
             "Department: %s\n",
             students[index].department
+        );
+        printf(
+            "Password: %s\n",
+            students[index].password
+        );
+        printf(
+            "Birthplace answer: %s\n",
+            students[index].answer_birth
+        );
+        printf(
+            "First school answer: %s\n",
+            students[index].answer_school
+        );
+        printf(
+            "First book answer: %s\n",
+            students[index].answer_book
+        );
+        printf(
+            "Bicycle color answer: %s\n",
+            students[index].answer_bike
         );
     }
 
@@ -7784,7 +7799,6 @@ static void admin_students_menu(void)
         printf("----------------------------------------\n");
         printf("Admin: Student Management\n");
         printf("----------------------------------------\n");
-
         printf("1. List students\n");
         printf("2. Search students\n");
         printf("3. Register one student\n");
@@ -7797,22 +7811,27 @@ static void admin_students_menu(void)
         if (option==1)
         {
             list_students();
+            wait_for_enter();
         }
         else if (option==2)
         {
             search_students();
+            wait_for_enter();
         }
         else if (option==3)
         {
             register_student();
+            wait_for_enter();
         }
         else if (option==4)
         {
             import_students_file();
+            wait_for_enter();
         }
         else if (option==5)
         {
             delete_student();
+            wait_for_enter();
         }
         else if (option==6)
         {
@@ -7855,7 +7874,7 @@ static void list_faculty(void)
         );
 
         printf(
-            "Faculty ID: %s\n",
+            "Faculty ID / Username: %s\n",
             faculty_members[index].faculty_id
         );
 
@@ -7882,6 +7901,31 @@ static void list_faculty(void)
         printf(
             "Department: %s\n",
             faculty_members[index].department
+        );
+
+        printf(
+            "Password: %s\n",
+            faculty_members[index].password
+        );
+
+        printf(
+            "Birthplace answer: %s\n",
+            faculty_members[index].answer_birth
+        );
+
+        printf(
+            "First school answer: %s\n",
+            faculty_members[index].answer_school
+        );
+
+        printf(
+            "First book answer: %s\n",
+            faculty_members[index].answer_book
+        );
+
+        printf(
+            "Bicycle color answer: %s\n",
+            faculty_members[index].answer_bike
         );
     }
 
@@ -8377,22 +8421,27 @@ static void admin_faculty_menu(void)
         if (option==1)
         {
             list_faculty();
+            wait_for_enter();
         }
         else if (option==2)
         {
             search_faculty();
+            wait_for_enter();
         }
         else if (option==3)
         {
             register_faculty();
+            wait_for_enter();
         }
         else if (option==4)
         {
             import_faculty_file();
+            wait_for_enter();
         }
         else if (option==5)
         {
             delete_faculty();
+            wait_for_enter();
         }
         else if (option==6)
         {
@@ -8719,18 +8768,22 @@ static void admin_courses_menu(void)
         if (option==1)
         {
             list_courses();
+            wait_for_enter();
         }
         else if (option==2)
         {
             search_courses();
+            wait_for_enter();
         }
         else if (option==3)
         {
             register_course();
+            wait_for_enter();
         }
         else if (option==4)
         {
             delete_course();
+            wait_for_enter();
         }
         else if (option==5)
         {
@@ -9092,8 +9145,13 @@ static void login_student(void)
     char password[STR_SIZE];
     int index;
 
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Student Login\n");
+    printf("----------------------------------------\n");
+
     read_line(
-        "Enter student ID: ",
+        "Enter username: ",
         username,
         sizeof(username)
     );
@@ -9102,7 +9160,7 @@ static void login_student(void)
 
     if (index==-1)
     {
-        printf("Student ID not found.\n");
+        printf("Username not found.\n");
         return;
     }
 
@@ -9128,8 +9186,13 @@ static void login_faculty(void)
     char password[STR_SIZE];
     int index;
 
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Faculty Login\n");
+    printf("----------------------------------------\n");
+
     read_line(
-        "Enter faculty ID: ",
+        "Enter username: ",
         username,
         sizeof(username)
     );
@@ -9138,7 +9201,7 @@ static void login_faculty(void)
 
     if (index==-1)
     {
-        printf("Active faculty ID not found.\n");
+        printf("Username not found or account is inactive.\n");
         return;
     }
 
@@ -9163,15 +9226,20 @@ static void login_admin(void)
     char username[SMALL_SIZE];
     char password[STR_SIZE];
 
+    printf("\n");
+    printf("----------------------------------------\n");
+    printf("Admin Login\n");
+    printf("----------------------------------------\n");
+
     read_line(
-        "Enter admin username: ",
+        "Enter username: ",
         username,
         sizeof(username)
     );
 
     if (strcmp(username, ADMIN_USERNAME)!=0)
     {
-        printf("Admin username not found.\n");
+        printf("Username not found.\n");
         return;
     }
 
@@ -9195,15 +9263,8 @@ int main(void)
 {
     int option;
 
-     if (load_all())
+    if (!load_all())
     {
-        printf("Data loaded successfully from %s.\n",DATA_FILE);
-    }
-    else
-    {
-        printf("No valid data file was found. "
-	"Creating sample data.\n");
-
         initialize_sample_data();
 
         if (!save_all())
@@ -9212,24 +9273,25 @@ int main(void)
         }
     }
 
-    show_data_summary();
-
     while (1)
     {
         show_main_menu();
-        option = read_int("Enter an option: ");
+        option=read_int("Enter an option: ");
 
         if (option==1)
-	{
-    	    login_student();
+        {
+            login_student();
+            wait_for_enter();
         }
         else if (option==2)
         {
             login_faculty();
+            wait_for_enter();
         }
         else if (option==3)
         {
             login_admin();
+            wait_for_enter();
         }
         else if (option==4)
         {
@@ -9237,7 +9299,7 @@ int main(void)
         }
         else if (option==5)
         {
-	    save_all();
+            save_all();
             printf("Goodbye.\n");
             break;
         }
