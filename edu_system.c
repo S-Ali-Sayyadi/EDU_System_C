@@ -41,11 +41,12 @@
 #define UI_PRIMARY "\033[38;2;0;127;255m"
 #define UI_HEADER "\033[38;2;129;178;20m"
 #define UI_ACCENT "\033[38;2;0;127;255m"
-#define UI_SUCCESS "\033[92m"
-#define UI_WARNING "\033[93m"
-#define UI_ERROR "\033[91m"
+#define UI_SUCCESS "\033[38;2;74;222;128m"
+#define UI_WARNING "\033[38;2;245;158;11m"
+#define UI_ERROR "\033[38;2;248;113;113m"
 #define UI_INPUT "\033[38;2;255;204;41m"
-#define UI_MUTED "\033[90m"
+#define UI_MUTED "\033[38;2;156;163;175m"
+#define UI_TEXT "\033[38;2;229;231;235m"
 
 typedef struct
 {
@@ -3458,12 +3459,14 @@ static void ui_page_header(
 static void ui_menu_item(int number,const char *label)
 {
     printf(
-        "  %s%s[%d]%s  %s\n",
+        "  %s%s[%d]%s  %s%s%s\n",
         ui_style(UI_BOLD),
         ui_style(UI_ACCENT),
         number,
         ui_style(UI_RESET),
-        label
+        ui_style(UI_TEXT),
+        label,
+        ui_style(UI_RESET)
     );
 }
 
@@ -3481,11 +3484,13 @@ static void ui_loading(const char *message)
     for (frame=0; frame<8; frame++)
     {
         printf(
-            "\r  %s%c%s %s",
+            "\r  %s%c%s %s%s%s",
             ui_style(UI_ACCENT),
             frames[frame%4],
             ui_style(UI_RESET),
-            message
+            ui_style(UI_TEXT),
+            message,
+            ui_style(UI_RESET)
         );
         fflush(stdout);
         ui_sleep_ms(55);
@@ -3524,33 +3529,39 @@ static void ui_splash(void)
 static void ui_success_message(const char *message)
 {
     printf(
-        "\n%s%s[OK]%s %s\n",
+        "\n%s%s[OK]%s %s%s%s\n",
         ui_style(UI_BOLD),
         ui_style(UI_SUCCESS),
         ui_style(UI_RESET),
-        message
+        ui_style(UI_TEXT),
+        message,
+        ui_style(UI_RESET)
     );
 }
 
 static void ui_warning_message(const char *message)
 {
     printf(
-        "\n%s%s[!]%s %s\n",
+        "\n%s%s[!]%s %s%s%s\n",
         ui_style(UI_BOLD),
         ui_style(UI_WARNING),
         ui_style(UI_RESET),
-        message
+        ui_style(UI_TEXT),
+        message,
+        ui_style(UI_RESET)
     );
 }
 
 static void ui_error_message(const char *message)
 {
     printf(
-        "\n%s%s[X]%s %s\n",
+        "\n%s%s[X]%s %s%s%s\n",
         ui_style(UI_BOLD),
         ui_style(UI_ERROR),
         ui_style(UI_RESET),
-        message
+        ui_style(UI_TEXT),
+        message,
+        ui_style(UI_RESET)
     );
 }
 
